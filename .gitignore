@@ -22,6 +22,7 @@
 ### Build configuration ###
 ###########################
 
+print_struc.py
 /custom.py
 misc/hooks/pre-commit-custom-*
 
