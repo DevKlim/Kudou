@@ -119,6 +119,9 @@
 
 /* Static members */
 
+// The script encryption key used for encrypted scripts and PCK files.
+uint8_t script_encryption_key[32] = { 0 };
+
 // Singletons
 
 // Initialized in setup()
@@ -218,8 +221,10 @@ static int64_t init_embed_parent_window_id = 0;
 #ifdef TOOLS_ENABLED
 static bool init_display_scale_found = false;
 static int init_display_scale = 0;
+static bool init_custom_scale_found = false;
 static float init_custom_scale = 1.0;
 static bool init_expand_to_title = false;
+static bool init_expand_to_title_found = false;
 #endif
 static bool use_custom_res = true;
 static bool force_res = false;
@@ -515,9 +520,9 @@ void Main::print_help(const char *p_binary) {
 	print_help_option("-p, --project-manager", "Start the project manager, even if a project is auto-detected.\n", CLI_OPTION_AVAILABILITY_EDITOR);
 	print_help_option("--recovery-mode", "Start the editor in recovery mode, which disables features that can typically cause startup crashes, such as tool scripts, editor plugins, GDExtension addons, and others.\n", CLI_OPTION_AVAILABILITY_EDITOR);
 	print_help_option("--debug-server <uri>", "Start the editor debug server (<protocol>://<host/IP>[:port], e.g. tcp://127.0.0.1:6007)\n", CLI_OPTION_AVAILABILITY_EDITOR);
-	print_help_option("--dap-port <port>", "Use the specified port for the GDScript Debugger Adaptor protocol. Recommended port range [1024, 49151].\n", CLI_OPTION_AVAILABILITY_EDITOR);
+	print_help_option("--dap-port <port>", "Use the specified port for the GDScript Debug Adapter Protocol. Recommended port range [1024, 49151].\n", CLI_OPTION_AVAILABILITY_EDITOR);
 #if defined(MODULE_GDSCRIPT_ENABLED) && !defined(GDSCRIPT_NO_LSP)
-	print_help_option("--lsp-port <port>", "Use the specified port for the GDScript language server protocol. Recommended port range [1024, 49151].\n", CLI_OPTION_AVAILABILITY_EDITOR);
+	print_help_option("--lsp-port <port>", "Use the specified port for the GDScript Language Server Protocol. Recommended port range [1024, 49151].\n", CLI_OPTION_AVAILABILITY_EDITOR);
 #endif // MODULE_GDSCRIPT_ENABLED && !GDSCRIPT_NO_LSP
 #endif
 	print_help_option("--quit", "Quit after the first iteration.\n");
@@ -2260,8 +2265,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		FORCE_ANGLE("Intel", "Intel(R) HD Graphics 4000");
 		FORCE_ANGLE("0x8086", "0x0162"); // HD Graphics 4000, Gen7, Ivy Bridge
 		FORCE_ANGLE("0x8086", "0x0166");
-		FORCE_ANGLE("Intel", "Intel HD Graphics P4000");
-		FORCE_ANGLE("Intel", "Intel(R) HD Graphics P4000");
 		FORCE_ANGLE("0x8086", "0x016A"); // HD Graphics P4000, Gen7, Ivy Bridge
 		FORCE_ANGLE("Intel", "Intel(R) Vallyview Graphics");
 		FORCE_ANGLE("0x8086", "0x0F30"); // Intel(R) Vallyview Graphics, Gen7, Vallyview
@@ -2607,9 +2610,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		}
 	}
 
-	GLOBAL_DEF_BASIC("internationalization/locale/include_text_server_data", false);
-	GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "internationalization/locale/line_breaking_strictness", PROPERTY_HINT_ENUM, "Auto,Loose,Normal,Strict"), 0);
-
 	OS::get_singleton()->_allow_hidpi = GLOBAL_DEF("display/window/dpi/allow_hidpi", true);
 	OS::get_singleton()->_allow_layered = GLOBAL_DEF_RST("display/window/per_pixel_transparency/allowed", false);
 
@@ -2744,6 +2744,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	GLOBAL_DEF_BASIC("xr/openxr/extensions/hand_tracking_controller_data_source", false); // XR_HAND_TRACKING_DATA_SOURCE_CONTROLLER_EXT
 	GLOBAL_DEF_RST_BASIC("xr/openxr/extensions/hand_interaction_profile", false);
 	GLOBAL_DEF_RST_BASIC("xr/openxr/extensions/eye_gaze_interaction", false);
+	GLOBAL_DEF_BASIC("xr/openxr/extensions/render_model", false);
 
 	// OpenXR Binding modifier settings
 	GLOBAL_DEF_BASIC("xr/openxr/binding_modifiers/analog_threshold", false);
@@ -2933,7 +2934,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 						prefer_wayland_found = true;
 					}
 
-					while (!screen_found || !prefer_wayland_found || !tablet_found || !ac_found) {
+					while (!screen_found || !init_expand_to_title_found || !init_display_scale_found || !init_custom_scale_found || !prefer_wayland_found || !tablet_found || !ac_found) {
 						assign = Variant();
 						next_tag.fields.clear();
 						next_tag.name = String();
@@ -2952,22 +2953,22 @@ Error Main::setup2(bool p_show_boot_logo) {
 									restore_editor_window_layout = value.operator int() == EditorSettings::InitialScreen::INITIAL_SCREEN_AUTO;
 								}
 							}
-							if (assign == "interface/accessibility/accessibility_support") {
+							if (!ac_found && assign == "interface/accessibility/accessibility_support") {
 								accessibility_mode_editor = value;
 								ac_found = true;
-							} else if (assign == "interface/editor/expand_to_title") {
+							} else if (!init_expand_to_title_found && assign == "interface/editor/expand_to_title") {
 								init_expand_to_title = value;
-							} else if (assign == "interface/editor/display_scale") {
+								init_expand_to_title_found = true;
+							} else if (!init_display_scale_found && assign == "interface/editor/display_scale") {
 								init_display_scale = value;
 								init_display_scale_found = true;
-							} else if (assign == "interface/editor/custom_display_scale") {
+							} else if (!init_custom_scale_found && assign == "interface/editor/custom_display_scale") {
 								init_custom_scale = value;
+								init_custom_scale_found = true;
 							} else if (!prefer_wayland_found && assign == "run/platforms/linuxbsd/prefer_wayland") {
 								prefer_wayland = value;
 								prefer_wayland_found = true;
-							}
-
-							if (!tablet_found && assign == "interface/editor/tablet_driver") {
+							} else if (!tablet_found && assign == "interface/editor/tablet_driver") {
 								tablet_driver_editor = value;
 								tablet_found = true;
 							}
@@ -3197,7 +3198,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 		}
 
 #ifdef TOOLS_ENABLED
-		if (project_manager && init_display_scale_found) {
+		if (project_manager) {
 			float ui_scale = init_custom_scale;
 			switch (init_display_scale) {
 				case 0:
@@ -3736,7 +3737,7 @@ void Main::setup_boot_logo() {
 				}
 			}
 		} else {
-			// Create a 1×1 transparent image. This will effectively hide the splash image.
+			// Create a 1��1 transparent image. This will effectively hide the splash image.
 			boot_logo.instantiate();
 			boot_logo->initialize_data(1, 1, false, Image::FORMAT_RGBA8);
 			boot_logo->set_pixel(0, 0, Color(0, 0, 0, 0));
@@ -3783,6 +3784,11 @@ String Main::get_rendering_driver_name() {
 
 // everything the main loop needs to know about frame timings
 static MainTimerSync main_timer_sync;
+
+// For performance metrics.
+static uint64_t physics_process_max = 0;
+static uint64_t process_max = 0;
+static uint64_t navigation_process_max = 0;
 
 // Return value should be EXIT_SUCCESS if we start successfully
 // and should move on to `OS::run`, and EXIT_FAILURE otherwise for
@@ -3852,7 +3858,7 @@ int Main::start() {
 		} else if (E->get() == "--scene") {
 			E = E->next();
 			if (E) {
-				game_path = E->get();
+				game_path = ResourceUID::ensure_path(E->get());
 			} else {
 				ERR_FAIL_V_MSG(EXIT_FAILURE, "Missing scene path, aborting.");
 			}
@@ -3871,7 +3877,7 @@ int Main::start() {
 				// or other file extensions without trouble. This can be used to implement
 				// "drag-and-drop onto executable" logic, which can prove helpful
 				// for non-game applications.
-				game_path = E->get();
+				game_path = scene_path;
 			}
 		}
 		// Then parameters that have an argument to the right.
@@ -4356,8 +4362,7 @@ int Main::start() {
 		sml->set_auto_accept_quit(GLOBAL_GET("application/config/auto_accept_quit"));
 		sml->set_quit_on_go_back(GLOBAL_GET("application/config/quit_on_go_back"));
 
-		if (!editor && !project_manager) {
-			//standard helpers that can be changed from main config
+		if (!editor && !project_manager) { // game
 
 			String stretch_mode = GLOBAL_GET("display/window/stretch/mode");
 			String stretch_aspect = GLOBAL_GET("display/window/stretch/aspect");
@@ -4604,11 +4609,6 @@ int Main::iterating = 0;
 bool Main::is_iterating() {
 	return iterating > 0;
 }
-
-// For performance metrics.
-static uint64_t physics_process_max = 0;
-static uint64_t process_max = 0;
-static uint64_t navigation_process_max = 0;
 
 // Return false means iterating further, returning true means `OS::run`
 // will terminate the program. In case of failure, the OS exit code needs

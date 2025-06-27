@@ -417,7 +417,7 @@ EditorLocaleDialog::EditorLocaleDialog() {
 			}
 			{
 				lang_list = memnew(Tree);
-				lang_list->set_accessibility_name(TTRC("Language"));
+				lang_list->set_accessibility_name(TTRC("Language:"));
 				lang_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 				lang_list->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 				lang_list->connect("cell_selected", callable_mp(this, &EditorLocaleDialog::_item_selected));
@@ -456,7 +456,7 @@ EditorLocaleDialog::EditorLocaleDialog() {
 			}
 			{
 				cnt_list = memnew(Tree);
-				cnt_list->set_accessibility_name(TTRC("Country"));
+				cnt_list->set_accessibility_name(TTRC("Country:"));
 				cnt_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 				cnt_list->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 				cnt_list->connect("cell_selected", callable_mp(this, &EditorLocaleDialog::_item_selected));

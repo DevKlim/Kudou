@@ -166,6 +166,7 @@ public:
 		if (unlikely(p_index == _cowdata.size())) {
 			return _null;
 		}
+
 		return _cowdata.get(p_index);
 	}
 	_FORCE_INLINE_ CharProxy<T> operator[](int p_index) { return CharProxy<T>(p_index, _cowdata); }
@@ -756,8 +757,6 @@ _FORCE_INLINE_ String ETRN(const String &p_text, const String &p_text_plural, in
 	}
 	return p_text_plural;
 }
-
-bool select_word(const String &p_s, int p_col, int &r_beg, int &r_end);
 
 template <typename... P>
 _FORCE_INLINE_ Vector<String> sarray(P... p_args) {

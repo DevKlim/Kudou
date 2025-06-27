@@ -60,10 +60,16 @@ if env["metal"]:
         Exit(255)
     SConscript("metal/SCsub")
 
+# Input drivers
+if env["sdl"] and env["platform"] in ["linuxbsd", "macos", "windows"]:
+    # TODO: Evaluate support for Android, iOS, and Web.
+    SConscript("sdl/SCsub")
+
 # Core dependencies
 SConscript("png/SCsub")
 
 env.add_source_files(env.drivers_sources, "*.cpp")
 
 lib = env.add_library("drivers", env.drivers_sources)
+print("drivers lib:", lib)
 env.Prepend(LIBS=[lib])

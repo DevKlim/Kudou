@@ -25,14 +25,7 @@
 //   Brecht Van Lommel <brecht@blender.org>
 //   Jonathan Hue <jhue@adobe.com>
 //   Cuda Chen <clh960524@gmail.com>
-//   Aymen Qader <aymen.qader@arm.com>/* Tunable configurations */
-
-/* Enable precise implementation of math operations
- * This would slow down the computation a bit, but gives consistent result with
- * x86 SSE. (e.g. would solve a hole or NaN pixel in the rendering result)
- */
-/* _mm_min|max_ps|ss|pd|sd */
-#ifndef SSE2NEON_PRECISE_MINMAX
+//   Aymen Qader <aymen.qader@arm.com>#ifndef SSE2NEON_PRECISE_MINMAX
 #define SSE2NEON_PRECISE_MINMAX (0)
 #endif
 /* _mm_rcp_ps and _mm_div_ps */

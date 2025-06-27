@@ -2,6 +2,7 @@
 
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/os/memory.h" // For memcpy
 #include "core/string/print_string.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/list.h"
@@ -18,6 +19,7 @@
 enum PackFlags {
 	PACK_DIR_ENCRYPTED = 1 << 0,
 	PACK_REL_FILEBASE = 1 << 1,
+	PACK_SPARSE_BUNDLE = 1 << 2,
 };
 
 enum PackFileFlags {
@@ -40,6 +42,7 @@ public:
 		uint8_t md5[16];
 		PackSource *src = nullptr;
 		bool encrypted;
+		bool bundle;
 	};
 
 private:
@@ -65,8 +68,11 @@ private:
 		PathMD5() {}
 
 		explicit PathMD5(const Vector<uint8_t> &p_buf) {
-			a = *((uint64_t *)&p_buf[0]);
-			b = *((uint64_t *)&p_buf[8]);
+			// Use memcpy to avoid strict aliasing violations and potential unaligned access.
+			// Assuming p_buf is guaranteed to be at least 16 bytes (MD5 hash size).
+			CRASH_COND(p_buf.size() < 16);
+			memcpy(&a, p_buf.ptr(), sizeof(uint64_t));
+			memcpy(&b, p_buf.ptr() + sizeof(uint64_t), sizeof(uint64_t));
 		}
 	};
 
@@ -82,9 +88,18 @@ private:
 	void _free_packed_dirs(PackedDir *p_dir);
 	void _get_file_paths(PackedDir *p_dir, const String &p_parent_dir, HashSet<String> &r_paths) const;
 
+	// Helper to normalize path for lookup
+	_FORCE_INLINE_ PathMD5 _get_path_md5(const String &p_path) const {
+		String path_to_hash = p_path.simplify_path();
+		if (path_to_hash.begins_with("res://")) {
+			path_to_hash = path_to_hash.trim_prefix("res://");
+		}
+		return PathMD5(path_to_hash.md5_buffer());
+	}
+
 public:
 	void add_pack_source(PackSource *p_source);
-	void add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted = false); // for PackSource
+	void add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted = false, bool p_bundle = false); // for PackSource
 	void remove_path(const String &p_path);
 	uint8_t *get_file_hash(const String &p_path);
 	HashSet<String> get_file_paths() const;
@@ -179,8 +194,7 @@ public:
 };
 
 int64_t PackedData::get_size(const String &p_path) {
-	String simplified_path = p_path.simplify_path();
-	PathMD5 pmd5(simplified_path.md5_buffer());
+	PathMD5 pmd5 = _get_path_md5(p_path);
 	HashMap<PathMD5, PackedFile, PathMD5>::Iterator E = files.find(pmd5);
 	if (!E) {
 		return -1; // File not found.
@@ -192,8 +206,7 @@ int64_t PackedData::get_size(const String &p_path) {
 }
 
 Ref<FileAccess> PackedData::try_open_path(const String &p_path) {
-	String simplified_path = p_path.simplify_path().trim_prefix("res://");
-	PathMD5 pmd5(simplified_path.md5_buffer());
+	PathMD5 pmd5 = _get_path_md5(p_path);
 	HashMap<PathMD5, PackedFile, PathMD5>::Iterator E = files.find(pmd5);
 	if (!E) {
 		return nullptr; // Not found.
@@ -203,7 +216,7 @@ Ref<FileAccess> PackedData::try_open_path(const String &p_path) {
 }
 
 bool PackedData::has_path(const String &p_path) {
-	return files.has(PathMD5(p_path.simplify_path().trim_prefix("res://").md5_buffer()));
+	return files.has(_get_path_md5(p_path));
 }
 
 bool PackedData::has_directory(const String &p_path) {

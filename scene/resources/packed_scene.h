@@ -166,6 +166,7 @@ public:
 
 	Vector<NodePath> get_editable_instances() const;
 	Ref<Resource> get_sub_resource(const String &p_path);
+	Vector<Ref<Resource>> get_sub_resources();
 
 	//build API
 

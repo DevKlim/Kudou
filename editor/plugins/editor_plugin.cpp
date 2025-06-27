@@ -537,26 +537,6 @@ void EditorPlugin::remove_resource_conversion_plugin(const Ref<EditorResourceCon
 	EditorNode::get_singleton()->remove_resource_conversion_plugin(p_plugin);
 }
 
-#ifndef DISABLE_DEPRECATED
-void EditorPlugin::_editor_project_settings_changed() {
-	emit_signal(SNAME("project_settings_changed"));
-}
-#endif
-
-void EditorPlugin::_notification(int p_what) {
-#ifndef DISABLE_DEPRECATED
-	switch (p_what) {
-		case NOTIFICATION_ENTER_TREE: {
-			ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &EditorPlugin::_editor_project_settings_changed));
-		} break;
-
-		case NOTIFICATION_EXIT_TREE: {
-			ProjectSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &EditorPlugin::_editor_project_settings_changed));
-		} break;
-	}
-#endif
-}
-
 void EditorPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_control_to_container", "container", "control"), &EditorPlugin::add_control_to_container);
 	ClassDB::bind_method(D_METHOD("add_control_to_bottom_panel", "control", "title", "shortcut"), &EditorPlugin::add_control_to_bottom_panel, DEFVAL(Ref<Shortcut>()));
@@ -643,7 +623,6 @@ void EditorPlugin::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("main_screen_changed", PropertyInfo(Variant::STRING, "screen_name")));
 	ADD_SIGNAL(MethodInfo("resource_saved", PropertyInfo(Variant::OBJECT, "resource", PROPERTY_HINT_RESOURCE_TYPE, "Resource")));
 	ADD_SIGNAL(MethodInfo("scene_saved", PropertyInfo(Variant::STRING, "filepath")));
-	ADD_SIGNAL(MethodInfo("project_settings_changed"));
 
 	BIND_ENUM_CONSTANT(CONTAINER_TOOLBAR);
 	BIND_ENUM_CONSTANT(CONTAINER_SPATIAL_EDITOR_MENU);

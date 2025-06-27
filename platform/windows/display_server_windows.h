@@ -1,7 +1,6 @@
 #pragma once
 
 #include "crash_handler_windows.h"
-#include "joypad_windows.h"
 #include "key_mapping_windows.h"
 #include "tts_windows.h"
 
@@ -166,6 +165,8 @@ class DropTargetWindows;
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
 
+class JoypadSDL;
+
 class DisplayServerWindows : public DisplayServer {
 	GDSOFTCLASS(DisplayServerWindows, DisplayServer);
 
@@ -248,7 +249,7 @@ class DisplayServerWindows : public DisplayServer {
 	String rendering_driver;
 	bool app_focused = false;
 	bool keep_screen_on = false;
-	bool get_object_recieved = false;
+	bool get_object_received = false;
 	HANDLE power_request;
 
 	TTS_Windows *tts = nullptr;
@@ -345,7 +346,9 @@ class DisplayServerWindows : public DisplayServer {
 		HWND parent_hwnd = 0;
 	};
 
-	JoypadWindows *joypad = nullptr;
+#ifdef SDL_ENABLED
+	JoypadSDL *joypad_sdl = nullptr;
+#endif
 	HHOOK mouse_monitor = nullptr;
 	List<WindowID> popup_list;
 	uint64_t time_since_popup = 0;

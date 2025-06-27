@@ -1,5 +1,6 @@
 #ifndef __khrplatform_h_
-#define __khrplatform_h_#if defined(__SCITECH_SNAP__) && !defined(KHRONOS_STATIC)
+#define __khrplatform_h_
+#if defined(__SCITECH_SNAP__) && !defined(KHRONOS_STATIC)
 #   define KHRONOS_STATIC 1
 #endif
 

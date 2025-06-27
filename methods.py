@@ -76,6 +76,7 @@ def add_source_files_scu(self, sources, files, allow_gen=False):
 # Either builds the folder using the SCU system,
 # or reverts to regular build.
 def add_source_files(self, sources, files, allow_gen=False):
+    print(f"add_source_files: sources={sources}, files={files}, allow_gen={allow_gen}")
     if not add_source_files_scu(self, sources, files, allow_gen):
         # Wraps the original function when scu build is not active.
         add_source_files_orig(self, sources, files, allow_gen)
