@@ -8496,7 +8496,7 @@ EditorNode::EditorNode() {
 
 	add_editor_plugin(memnew(DebuggerEditorPlugin(debug_menu)));
 
-	add_editor_plugin(memnew(EditorPluginAgentDock(this)));
+	
 
 	disk_changed = memnew(ConfirmationDialog);
 	{

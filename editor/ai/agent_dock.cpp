@@ -20,7 +20,8 @@ void EditorPluginAgentDock::_notification(int p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			// Dock panel
 			agent_dock = memnew(VBoxContainer);
-			agent_dock->set_name(SNAME("KudouAgent"));
+			// The name is used as the title of the dock tab. Use TTR for translatable strings.
+			agent_dock->set_name(TTR("Kudou Agent"));
 
 			chat_history = memnew(RichTextLabel);
 			chat_history->set_v_size_flags(Control::SIZE_EXPAND_FILL);
@@ -38,14 +39,17 @@ void EditorPluginAgentDock::_notification(int p_what) {
 			send_button->set_text(TTR("Send"));
 			input_container->add_child(send_button);
 
-			add_control_to_bottom_panel(agent_dock, TTR("Kudou Agent"));
+			// Use the EditorPlugin's own method to add the control as a dock.
+			// This places it in the top-left of the right-hand dock area.
+			add_control_to_dock(DOCK_SLOT_RIGHT_UL, agent_dock);
 
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
 			if (agent_dock) {
-				remove_control_from_bottom_panel(agent_dock);
-				// The control is freed by remove_control_from_bottom_panel.
+				// Use the corresponding method to remove the dock.
+				remove_control_from_docks(agent_dock);
+				// The control is freed by remove_control_from_docks.
 				agent_dock = nullptr;
 			}
 		} break;
