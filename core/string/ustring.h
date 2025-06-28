@@ -583,6 +583,7 @@ public:
 	String c_unescape() const;
 	String json_escape() const;
 	Error parse_url(String &r_scheme, String &r_host, int &r_port, String &r_path, String &r_fragment) const;
+	Error parse_utf8(const char *p_utf8, int p_len = -1);
 
 	String property_name_encode() const;
 

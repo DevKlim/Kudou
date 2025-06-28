@@ -2,6 +2,7 @@
 #define AGENT_DOCK_H
 
 #include "editor/plugins/editor_plugin.h"
+#include "chat_controller.h"
 
 class Button;
 class Control;
@@ -17,9 +18,12 @@ private:
 	RichTextLabel *chat_history = nullptr;
 	LineEdit *user_input = nullptr;
 	Button *send_button = nullptr;
+	ChatController *chat_controller = nullptr;
 
 protected:
 	void _notification(int p_what);
+	void _on_send_button_pressed();
+	void _on_chat_message_received(const String &message);
 
 public:
 	virtual String get_plugin_name() const override { return "Kudou Agent"; }
