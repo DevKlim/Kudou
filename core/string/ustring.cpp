@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  ustring.cpp                                                           */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "ustring.h"
 
 #include "core/crypto/crypto_core.h"
@@ -168,7 +198,7 @@ void String::copy_from_unchecked(const char32_t *p_char, const int p_length) {
 	resize_uninitialized(p_length + 1); // + 1 for \0
 	char32_t *dst = ptrw();
 	memcpy(dst, p_char, p_length * sizeof(char32_t));
-	*(dst + p_length) = 0;
+	*(dst + p_length) = _null;
 }
 
 String String::operator+(const String &p_str) const {
@@ -1633,17 +1663,17 @@ String String::hex_encode_buffer(const uint8_t *p_buffer, int p_len) {
 Vector<uint8_t> String::hex_decode() const {
 	ERR_FAIL_COND_V_MSG(length() % 2 != 0, Vector<uint8_t>(), "Hexadecimal string of uneven length.");
 
-#define HEX_TO_BYTE(m_output, m_index)                                                                                                      \
-	uint8_t m_output;                                                                                                                       \
-	c = operator[](m_index);                                                                                                                \
-	if (is_digit(c)) {                                                                                                                      \
-		m_output = c - '0';                                                                                                                 \
-	} else if (c >= 'a' && c <= 'f') {                                                                                                      \
-		m_output = c - 'a' + 10;                                                                                                            \
-	} else if (c >= 'A' && c <= 'F') {                                                                                                      \
-		m_output = c - 'A' + 10;                                                                                                            \
-	} else {                                                                                                                                \
-		ERR_FAIL_V_MSG(Vector<uint8_t>(), "Invalid hexadecimal character \"" + chr(c) + "\" at index " + String::num_int64(m_index) + "."); \
+#define HEX_TO_BYTE(m_output, m_index)                                                                                   \
+	uint8_t m_output;                                                                                                    \
+	c = operator[](m_index);                                                                                             \
+	if (is_digit(c)) {                                                                                                   \
+		m_output = c - '0';                                                                                              \
+	} else if (c >= 'a' && c <= 'f') {                                                                                   \
+		m_output = c - 'a' + 10;                                                                                         \
+	} else if (c >= 'A' && c <= 'F') {                                                                                   \
+		m_output = c - 'A' + 10;                                                                                         \
+	} else {                                                                                                             \
+		ERR_FAIL_V_MSG(Vector<uint8_t>(), "Invalid hexadecimal character \"" + chr(c) + "\" at index " + m_index + "."); \
 	}
 
 	Vector<uint8_t> out;
@@ -1715,7 +1745,7 @@ Error String::append_ascii(const Span<char> &p_range) {
 			*dst = chr;
 		}
 	}
-	*dst = 0;
+	*dst = _null;
 	return decode_failed ? ERR_INVALID_DATA : OK;
 }
 
@@ -1867,12 +1897,12 @@ Error String::append_utf8(const char *p_utf8, int p_len, bool p_skip_cr) {
 				} else if (c3 == 0) {
 					print_unicode_error(vformat("Missing %x %x UTF-8 continuation byte", c, c2), true);
 				} else if (c3_valid == false) {
-					print_unicode_error(vformat("Byte %x is not a correct continuation byte after %x %x", c3, c, c2), true);
+					print_unicode_error(vformat("Byte %x is not a correct continuation byte after %x %x", c3, c, c2));
 					size = 2;
 				} else if (c4 == 0) {
 					print_unicode_error(vformat("Missing %x %x %x UTF-8 continuation byte", c, c2, c3), true);
 				} else {
-					print_unicode_error(vformat("Byte %x is not a correct continuation byte after %x %x %x", c4, c, c2, c3), true);
+					print_unicode_error(vformat("Byte %x is not a correct continuation byte after %x %x %x", c4, c, c2, c3));
 					size = 3;
 				}
 
@@ -1891,11 +1921,6 @@ Error String::append_utf8(const char *p_utf8, int p_len, bool p_skip_cr) {
 	resize_uninitialized(dst - ptr());
 
 	return result;
-}
-
-Error String::parse_utf8(const char *p_utf8, int p_len) {
-	clear();
-	return append_utf8(p_utf8, p_len);
 }
 
 CharString String::utf8(Vector<uint8_t> *r_ch_length_map) const {
@@ -2922,7 +2947,7 @@ String String::remove_char(char32_t p_char) const {
 		}
 	}
 
-	new_ptr[new_size] = 0;
+	new_ptr[new_size] = _null;
 
 	// Shrink new string to fit.
 	new_string.resize_uninitialized(new_size + 1);
@@ -3070,6 +3095,10 @@ int String::find(const char *p_str, int p_from) const {
 
 	if (len == 0 || src_len == 0) {
 		return -1; // won't find anything!
+	}
+
+	if (src_len == 1) {
+		return find_char(*p_str, p_from); // Optimize with single-char find.
 	}
 
 	const char32_t *src = get_data();
@@ -4044,15 +4073,14 @@ String String::replace_char(char32_t p_key, char32_t p_with) const {
 
 	// Copy or replace rest of input.
 	for (++index; index < len; ++index) {
-		const char32_t old_char = old_ptr[index];
-		if (old_char == p_key) {
+		if (old_ptr[index] == p_key) {
 			new_ptr[index] = p_with;
 		} else {
-			new_ptr[index] = old_char;
+			new_ptr[index] = old_ptr[index];
 		}
 	}
 
-	new_ptr[index] = 0;
+	new_ptr[index] = _null;
 
 	return new_string;
 }
@@ -4150,7 +4178,7 @@ String String::repeat(int p_count) const {
 		offset += stride;
 		stride = MIN(stride * 2, p_count - offset);
 	}
-	dst[p_count * len] = 0;
+	dst[p_count * len] = _null;
 	return new_string;
 }
 
@@ -4167,7 +4195,7 @@ String String::reverse() const {
 	for (int i = 0; i < len; i++) {
 		dst[i] = src[len - i - 1];
 	}
-	dst[len] = 0;
+	dst[len] = _null;
 	return new_string;
 }
 

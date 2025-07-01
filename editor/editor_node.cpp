@@ -42,7 +42,6 @@
 #include "servers/navigation_server_3d.h"
 #include "servers/rendering_server.h"
 
-#include "editor/ai/agent_dock.h"
 #include "editor/audio_stream_preview.h"
 #include "editor/debugger/editor_debugger_node.h"
 #include "editor/debugger/script_editor_debugger.h"
@@ -881,10 +880,6 @@ void EditorNode::_notification(int p_what) {
 			if (Engine::get_singleton()->is_recovery_mode_hint()) {
 				EditorToaster::get_singleton()->popup_str(TTR("Recovery Mode is enabled. Editor functionality has been restricted."), EditorToaster::SEVERITY_WARNING);
 			}
-
-			// Kudou Agent Dock initialization.
-			agent_plugin = memnew(EditorPluginAgentDock(this));
-			add_child(agent_plugin);
 
 			/* DO NOT LOAD SCENES HERE, WAIT FOR FILE SCANNING AND REIMPORT TO COMPLETE */
 		} break;
@@ -3674,8 +3669,7 @@ int EditorNode::_next_unsaved_scene(bool p_valid_filename, int p_start) {
 			return i;
 		} else {
 			for (int j = 0; j < editor_data.get_editor_plugin_count(); j++) {
-				unsaved = !editor_data.get_editor_plugin(j)->get_unsaved_status(scene_filename).is_empty();
-				if (unsaved) {
+				if (!editor_data.get_editor_plugin(j)->get_unsaved_status(scene_filename).is_empty()) {
 					return i;
 				}
 			}
@@ -4486,39 +4480,23 @@ HashMap<StringName, Variant> EditorNode::get_modified_properties_for_node(Node *
 	List<PropertyInfo> pinfo;
 	p_node->get_property_list(&pinfo);
 	for (const PropertyInfo &E : pinfo) {
-		if (!(E.usage & PROPERTY_USAGE_STORAGE)) {
-			continue;
-		}
-
-		switch (E.type) {
-			case Variant::OBJECT: {
-				bool node_reference = (E.type == Variant::OBJECT && E.hint == PROPERTY_HINT_NODE_TYPE);
-				if (p_node_references_only && !node_reference) {
-					continue;
-				}
-				bool is_valid_revert = false;
-				Variant revert_value = EditorPropertyRevert::get_property_revert_value(p_node, E.name, &is_valid_revert);
-				Variant current_value = p_node->get(E.name);
-				if (is_valid_revert) {
-					if (PropertyUtils::is_property_value_different(p_node, current_value, revert_value)) {
-						// If this property is a direct node reference, save a NodePath instead to prevent corrupted references.
-						if (node_reference) {
-							Node *target_node = Object::cast_to<Node>(current_value);
-							if (target_node) {
-								modified_property_map[E.name] = p_node->get_path_to(target_node);
-							}
-						} else {
-							modified_property_map[E.name] = current_value;
+		if (E.usage & PROPERTY_USAGE_STORAGE) {
+			bool node_reference = (E.type == Variant::OBJECT && E.hint == PROPERTY_HINT_NODE_TYPE);
+			if (p_node_references_only && !node_reference) {
+				continue;
+			}
+			bool is_valid_revert = false;
+			Variant revert_value = EditorPropertyRevert::get_property_revert_value(p_node, E.name, &is_valid_revert);
+			Variant current_value = p_node->get(E.name);
+			if (is_valid_revert) {
+				if (PropertyUtils::is_property_value_different(p_node, current_value, revert_value)) {
+					// If this property is a direct node reference, save a NodePath instead to prevent corrupted references.
+					if (node_reference) {
+						Node *target_node = Object::cast_to<Node>(current_value);
+						if (target_node) {
+							modified_property_map[E.name] = p_node->get_path_to(target_node);
 						}
-					}
-				}
-			} break;
-			default: {
-				bool is_valid_revert = false;
-				Variant revert_value = EditorPropertyRevert::get_property_revert_value(p_node, E.name, &is_valid_revert);
-				Variant current_value = p_node->get(E.name);
-				if (is_valid_revert) {
-					if (PropertyUtils::is_property_value_different(p_node, current_value, revert_value)) {
+					} else {
 						modified_property_map[E.name] = current_value;
 					}
 				}
@@ -8495,8 +8473,6 @@ EditorNode::EditorNode() {
 	add_child(audio_preview_gen);
 
 	add_editor_plugin(memnew(DebuggerEditorPlugin(debug_menu)));
-
-	
 
 	disk_changed = memnew(ConfirmationDialog);
 	{

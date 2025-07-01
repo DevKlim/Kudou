@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  main.cpp                                                              */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "main.h"
 
 #include "core/config/project_settings.h"
@@ -119,8 +149,7 @@
 
 /* Static members */
 
-// The script encryption key used for encrypted scripts and PCK files.
-uint8_t script_encryption_key[32] = { 0 };
+uint8_t script_encryption_key[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 // Singletons
 
@@ -2265,6 +2294,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		FORCE_ANGLE("Intel", "Intel(R) HD Graphics 4000");
 		FORCE_ANGLE("0x8086", "0x0162"); // HD Graphics 4000, Gen7, Ivy Bridge
 		FORCE_ANGLE("0x8086", "0x0166");
+		FORCE_ANGLE("Intel", "Intel HD Graphics P4000");
+		FORCE_ANGLE("Intel", "Intel(R) HD Graphics P4000");
 		FORCE_ANGLE("0x8086", "0x016A"); // HD Graphics P4000, Gen7, Ivy Bridge
 		FORCE_ANGLE("Intel", "Intel(R) Vallyview Graphics");
 		FORCE_ANGLE("0x8086", "0x0F30"); // Intel(R) Vallyview Graphics, Gen7, Vallyview
@@ -3737,7 +3768,7 @@ void Main::setup_boot_logo() {
 				}
 			}
 		} else {
-			// Create a 1��1 transparent image. This will effectively hide the splash image.
+			// Create a 1×1 transparent image. This will effectively hide the splash image.
 			boot_logo.instantiate();
 			boot_logo->initialize_data(1, 1, false, Image::FORMAT_RGBA8);
 			boot_logo->set_pixel(0, 0, Color(0, 0, 0, 0));
@@ -3784,11 +3815,6 @@ String Main::get_rendering_driver_name() {
 
 // everything the main loop needs to know about frame timings
 static MainTimerSync main_timer_sync;
-
-// For performance metrics.
-static uint64_t physics_process_max = 0;
-static uint64_t process_max = 0;
-static uint64_t navigation_process_max = 0;
 
 // Return value should be EXIT_SUCCESS if we start successfully
 // and should move on to `OS::run`, and EXIT_FAILURE otherwise for
@@ -4362,7 +4388,8 @@ int Main::start() {
 		sml->set_auto_accept_quit(GLOBAL_GET("application/config/auto_accept_quit"));
 		sml->set_quit_on_go_back(GLOBAL_GET("application/config/quit_on_go_back"));
 
-		if (!editor && !project_manager) { // game
+		if (!editor && !project_manager) {
+			//standard helpers that can be changed from main config
 
 			String stretch_mode = GLOBAL_GET("display/window/stretch/mode");
 			String stretch_aspect = GLOBAL_GET("display/window/stretch/aspect");
@@ -4609,6 +4636,11 @@ int Main::iterating = 0;
 bool Main::is_iterating() {
 	return iterating > 0;
 }
+
+// For performance metrics.
+static uint64_t physics_process_max = 0;
+static uint64_t process_max = 0;
+static uint64_t navigation_process_max = 0;
 
 // Return false means iterating further, returning true means `OS::run`
 // will terminate the program. In case of failure, the OS exit code needs

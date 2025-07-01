@@ -1,9 +1,0 @@
-
-Import("env")
-
-sources = [
-    "agent_dock.cpp",
-    "chat_controller.cpp",
-]
-
-env.add_source_files(env.editor_sources, sources)

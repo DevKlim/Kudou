@@ -2,6 +2,12 @@
 
 This document provides a high-level overview of the Kudou (a Godot fork) source code, intended to guide an AI agent in understanding and modifying the engine for agentic game development tasks.
 
+A more robust approach for adding your "Kudou Agent" would be to structure it as a proper custom module. In a custom module:
+
+    Your code would live in modules/kudou/.
+
+    You would add your custom settings (kudou/llm/*) from your module's registration code (e.g., in a register_types.cpp or in your EditorPluginAgentDock constructor/_enter_tree) using the EDITOR_DEF macro or EditorSettings::get_singleton()->set_setting(...).
+
 ## Core Concepts
 
 - **Nodes:** Everything in a game scene is a Node. Nodes are organized in a tree structure. The base class is `scene/main/node.h`. They have lifecycle callbacks like `_ready()` (on scene start) and `_process(delta)` (every frame).
