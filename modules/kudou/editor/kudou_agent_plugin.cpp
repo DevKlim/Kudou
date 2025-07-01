@@ -41,6 +41,7 @@ void KudouAgentPlugin::_notification(int p_what) {
 			// Connect to the controller's signal.
 			if (chat_controller) {
 				chat_controller->connect(SNAME("message_received"), callable_mp(this, &KudouAgentPlugin::_on_chat_message_received));
+				EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &KudouAgentPlugin::_on_settings_changed));
 			}
 
 			// Dock panel
@@ -72,7 +73,7 @@ void KudouAgentPlugin::_notification(int p_what) {
 			user_input = memnew(LineEdit);
 			user_input->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 			user_input->set_placeholder(TTR("Ask Kudou..."));
-			user_input->connect(SNAME("text_submitted"), callable_mp(this, &KudouAgentPlugin::_on_send_button_pressed));
+			user_input->connect(SNAME("text_submitted"), callable_mp(this, &KudouAgentPlugin::_on_text_submitted));
 			input_container->add_child(user_input);
 
 			send_button = memnew(Button);
@@ -156,6 +157,10 @@ void KudouAgentPlugin::_on_send_button_pressed() {
 	chat_controller->send_message(full_prompt);
 }
 
+void KudouAgentPlugin::_on_text_submitted(const String &p_text) {
+	_on_send_button_pressed();
+}
+
 void KudouAgentPlugin::_on_chat_message_received(const String &message) {
 	chat_history->add_text(vformat("Kudou: %s\n", message));
 
@@ -191,6 +196,12 @@ void KudouAgentPlugin::_on_chat_message_received(const String &message) {
 			}
 		}
 	}
+}
+
+void KudouAgentPlugin::_on_settings_changed() {
+	chat_controller->set_api_key(EDITOR_GET("kudou/llm/api_key"));
+	chat_controller->set_model(EDITOR_GET("kudou/llm/model"));
+	chat_controller->set_base_url(EDITOR_GET("kudou/llm/base_url"));
 }
 
 void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeItem *p_parent) {

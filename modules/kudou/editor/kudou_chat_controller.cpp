@@ -76,7 +76,7 @@ void KudouChatController::send_message(const String &p_message) {
 		return;
 	}
 
-	String url = base_url.path_join("models").path_join(model + ":generateContent") + "?key=" + api_key;
+			String url = base_url + "/models/" + model + ":generateContent?key=" + api_key;
 
 	Dictionary content_part;
 	content_part["text"] = p_message;

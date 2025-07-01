@@ -29,8 +29,10 @@ private:
 
 protected:
 	void _notification(int p_what);
-	void _on_send_button_pressed();
+			void _on_send_button_pressed();
+	void _on_text_submitted(const String &p_text);
 	void _on_chat_message_received(const String &message);
+	void _on_settings_changed();
 
 	// Corrected declarations
 	void _populate_file_tree(TreeItem *p_root);
