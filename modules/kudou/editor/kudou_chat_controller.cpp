@@ -4,6 +4,7 @@
 
 void KudouChatController::_bind_methods() {
 	ADD_SIGNAL(MethodInfo(SNAME("message_received"), PropertyInfo(Variant::STRING, "message")));
+	ADD_SIGNAL(MethodInfo(SNAME("request_finished")));
 }
 
 void KudouChatController::_notification(int p_what) {
@@ -16,16 +17,18 @@ void KudouChatController::_notification(int p_what) {
 
 void KudouChatController::_http_request_completed(int p_result, int p_response_code, const PackedStringArray &p_headers, const PackedByteArray &p_body) {
 	if (p_result != HTTPRequest::RESULT_SUCCESS) {
-		ERR_PRINT("HTTP Request Failed with error: " + itos(p_result));
+		ERR_PRINT(vformat("HTTP Request Failed with error: %d", p_result));
 		emit_signal(SNAME("message_received"), "Error: Failed to connect to LLM service.");
+		emit_signal(SNAME("request_finished"));
 		return;
 	}
 
 	if (p_response_code < 200 || p_response_code >= 300) {
-		ERR_PRINT("HTTP Request Failed with code: " + itos(p_response_code));
+		ERR_PRINT(vformat("HTTP Request Failed with code: %d", p_response_code));
 		String response_body = String::utf8((const char *)p_body.ptr(), p_body.size());
 		ERR_PRINT("Response Body: " + response_body);
-		emit_signal(SNAME("message_received"), "Error: LLM service returned status " + itos(p_response_code));
+		emit_signal(SNAME("message_received"), vformat("Error: LLM service returned status %d", p_response_code));
+		emit_signal(SNAME("request_finished"));
 		return;
 	}
 
@@ -36,24 +39,27 @@ void KudouChatController::_http_request_completed(int p_result, int p_response_c
 	if (err != OK) {
 		ERR_PRINT("JSON Parse Error: " + response_body);
 		emit_signal(SNAME("message_received"), "Error: Invalid response from LLM.");
+		emit_signal(SNAME("request_finished"));
 		return;
 	}
 
 	Dictionary parsed_response = json->get_data();
 
-	if (parsed_response.has("candidates")) {
+	// Safely parse the nested JSON structure with type checks
+	if (parsed_response.has("candidates") && parsed_response["candidates"].get_type() == Variant::ARRAY) {
 		Array candidates = parsed_response["candidates"];
-		if (candidates.size() > 0) {
+		if (candidates.size() > 0 && candidates[0].get_type() == Variant::DICTIONARY) {
 			Dictionary candidate = candidates[0];
-			if (candidate.has("content")) {
+			if (candidate.has("content") && candidate["content"].get_type() == Variant::DICTIONARY) {
 				Dictionary content = candidate["content"];
-				if (content.has("parts")) {
+				if (content.has("parts") && content["parts"].get_type() == Variant::ARRAY) {
 					Array parts = content["parts"];
-					if (parts.size() > 0) {
+					if (parts.size() > 0 && parts[0].get_type() == Variant::DICTIONARY) {
 						Dictionary part = parts[0];
-						if (part.has("text")) {
+						if (part.has("text") && part["text"].get_type() == Variant::STRING) {
 							String text = part["text"];
 							emit_signal(SNAME("message_received"), text);
+							emit_signal(SNAME("request_finished"));
 							return;
 						}
 					}
@@ -62,21 +68,28 @@ void KudouChatController::_http_request_completed(int p_result, int p_response_c
 		}
 	}
 	emit_signal(SNAME("message_received"), "Error: Unexpected response format from LLM.");
+	emit_signal(SNAME("request_finished"));
+}
+
+void KudouChatController::_emit_message_deferred(const String &p_message) {
+	emit_signal(SNAME("message_received"), p_message);
+	emit_signal(SNAME("request_finished"));
 }
 
 void KudouChatController::send_message(const String &p_message) {
 	if (!http_request) {
 		ERR_PRINT("HTTPRequest node not ready.");
+		callable_mp(this, &KudouChatController::_emit_message_deferred).call_deferred("Error: HTTPRequest node not ready.");
 		return;
 	}
 
 	if (base_url.is_empty() || api_key.is_empty() || model.is_empty()) {
 		ERR_PRINT("KudouChatController not configured. Set base_url, api_key, and model.");
-		emit_signal(SNAME("message_received"), "Error: Chat service not configured in Editor Settings -> Kudou.");
+		callable_mp(this, &KudouChatController::_emit_message_deferred).call_deferred("Error: Chat service not configured in Editor Settings -> Kudou.");
 		return;
 	}
 
-			String url = base_url + "/models/" + model + ":generateContent?key=" + api_key;
+	String url = base_url + "/models/" + model + ":generateContent?key=" + api_key;
 
 	Dictionary content_part;
 	content_part["text"] = p_message;
@@ -101,8 +114,8 @@ void KudouChatController::send_message(const String &p_message) {
 	http_request->cancel_request();
 	Error err = http_request->request(url, headers, HTTPClient::METHOD_POST, request_body_json);
 	if (err != OK) {
-		ERR_PRINT("HTTPRequest->request failed with error: " + itos(err));
-		emit_signal(SNAME("message_received"), "Error: Could not send request to LLM.");
+		ERR_PRINT(vformat("HTTPRequest->request failed with error: %d", err));
+		callable_mp(this, &KudouChatController::_emit_message_deferred).call_deferred("Error: Could not send request to LLM.");
 	}
 }
 

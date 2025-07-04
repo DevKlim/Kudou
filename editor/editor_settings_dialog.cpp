@@ -24,6 +24,15 @@
 #include "scene/gui/texture_rect.h"
 #include "scene/gui/tree.h"
 
+void EditorSettingsDialog::set_filter(const String &p_filter) {
+	if (search_box) {
+		search_box->set_text(p_filter);
+		if (inspector) {
+			inspector->update_category_list();
+		}
+	}
+}
+
 void EditorSettingsDialog::ok_pressed() {
 	if (!EditorSettings::get_singleton()) {
 		return;
@@ -841,6 +850,7 @@ void EditorSettingsDialog::_editor_restart_close() {
 void EditorSettingsDialog::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_update_shortcuts"), &EditorSettingsDialog::_update_shortcuts);
 	ClassDB::bind_method(D_METHOD("_settings_changed"), &EditorSettingsDialog::_settings_changed);
+	ClassDB::bind_method(D_METHOD("set_filter", "filter"), &EditorSettingsDialog::set_filter);
 }
 
 EditorSettingsDialog::EditorSettingsDialog() {

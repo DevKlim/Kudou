@@ -101,6 +101,7 @@ protected:
 
 public:
 	void popup_edit_settings();
+	void set_filter(const String &p_filter);
 	static void update_navigation_preset();
 
 	EditorSettingsDialog();

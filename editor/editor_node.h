@@ -707,6 +707,8 @@ public:
 
 	static EditorNode *get_singleton() { return singleton; }
 
+	EditorSettingsDialog *get_editor_settings_dialog() { return editor_settings_dialog; }
+
 	static EditorLog *get_log() { return singleton->log; }
 	static EditorData &get_editor_data() { return singleton->editor_data; }
 	static EditorFolding &get_editor_folding() { return singleton->editor_folding; }

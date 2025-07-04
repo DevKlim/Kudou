@@ -1,14 +1,17 @@
 #include "kudou_agent_plugin.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/config_file.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
 #include "core/os/os.h"
+#include "editor/editor_file_system.h"
 #include "editor/editor_interface.h"
 #include "editor/editor_node.h"
 #include "editor/editor_paths.h"
 #include "editor/editor_settings.h"
+#include "editor/editor_settings_dialog.h" // Needed for the dialog popup.
 #include "editor/themes/editor_scale.h"
 #include "scene/2d/node_2d.h"
 #include "scene/3d/node_3d.h"
@@ -18,20 +21,22 @@
 #include "scene/gui/control.h"
 #include "scene/gui/label.h"
 #include "scene/gui/line_edit.h"
+#include "scene/gui/option_button.h"
 #include "scene/gui/rich_text_label.h"
 #include "scene/gui/split_container.h"
-#include "scene/gui/tree.h"
 
 #include "modules/kudou/editor/kudou_chat_controller.h"
+#include "modules/kudou/editor/kudou_tree.h"
 
 void KudouAgentPlugin::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("_process_and_send_message", "message"), &KudouAgentPlugin::_process_and_send_message);
 }
 
 KudouAgentPlugin::KudouAgentPlugin() {
 	// Define settings here. This is the correct way for a module to add settings.
 	EDITOR_DEF("kudou/llm/base_url", "https://generativelanguage.googleapis.com/v1beta");
 	EditorSettings::get_singleton()->add_property_hint(PropertyInfo(Variant::STRING, "kudou/llm/base_url", PROPERTY_HINT_PLACEHOLDER_TEXT, "LLM API Base URL"));
-	EDITOR_DEF("kudou/llm/model", "gemini-1.5-flash");
+	EDITOR_DEF("kudou/llm/model", "gemini-2.5-flash");
 	EDITOR_DEF("kudou/llm/api_key", "");
 	EditorSettings::get_singleton()->add_property_hint(PropertyInfo(Variant::STRING, "kudou/llm/api_key", PROPERTY_HINT_PASSWORD, ""));
 
@@ -40,8 +45,6 @@ KudouAgentPlugin::KudouAgentPlugin() {
 }
 
 KudouAgentPlugin::~KudouAgentPlugin() {
-	// Child nodes like chat_controller are freed automatically.
-	// The agent_dock is handled in NOTIFICATION_EXIT_TREE.
 }
 
 void KudouAgentPlugin::_notification(int p_what) {
@@ -58,63 +61,48 @@ void KudouAgentPlugin::_notification(int p_what) {
 				return;
 			}
 
-			// Load prompts from JSON file.
 			_load_prompts();
 
-			// Connect to the controller's signal.
 			if (chat_controller) {
 				chat_controller->connect(SNAME("message_received"), callable_mp(this, &KudouAgentPlugin::_on_chat_message_received));
 				EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &KudouAgentPlugin::_on_settings_changed));
 			}
 
-			// Dock panel
+			EditorFileSystem::get_singleton()->connect("filesystem_changed", callable_mp(this, &KudouAgentPlugin::_on_filesystem_changed));
+			editor_node->connect("scene_changed", callable_mp(this, &KudouAgentPlugin::_on_refresh_scene_button_pressed));
+
 			agent_dock = memnew(VBoxContainer);
 			agent_dock->set_name(TTR("Kudou Agent"));
 			agent_dock->set_custom_minimum_size(Size2(0, 200 * EDSCALE));
 
-			// Split container for resizable panels
 			HSplitContainer *split_container = memnew(HSplitContainer);
 			split_container->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 			agent_dock->add_child(split_container);
 
-			// Left panel for file and scene trees
 			VBoxContainer *left_panel = memnew(VBoxContainer);
-			left_panel->set_custom_minimum_size(Size2(250 * EDSCALE, 0)); // Increased minimum width for better usability
+			left_panel->set_custom_minimum_size(Size2(250 * EDSCALE, 0));
 			split_container->add_child(left_panel);
 
-			// File tree Label
 			Label *file_tree_label = memnew(Label);
 			file_tree_label->set_text(TTR("Project Files Context"));
 			left_panel->add_child(file_tree_label);
 
-			// File tree for context selection
-			file_tree = memnew(Tree);
+			file_tree = memnew(KudouTree);
 			file_tree->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-			file_tree->set_columns(1); // Explicitly set columns
-			// The item_edited signal is used to propagate checks to children/parents.
-			file_tree->connect(SNAME("item_edited"), callable_mp(this, &KudouAgentPlugin::_on_item_edited));
+			file_tree->set_columns(1);
+			file_tree->set_column_expand(0, true);
 			left_panel->add_child(file_tree);
 
-			file_tree->clear();
-			TreeItem *file_root_item = file_tree->create_item();
-			file_root_item->set_text(0, "res://");
-			file_root_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
-			file_root_item->set_collapsed(false);
-			file_root_item->set_metadata(0, "res://");
-			file_root_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
-			_populate_file_tree(file_root_item);
+			_on_filesystem_changed(); // Initial population.
 
-			// Scene tree Label
 			Label *scene_tree_label = memnew(Label);
 			scene_tree_label->set_text(TTR("Current Scene Context"));
 			left_panel->add_child(scene_tree_label);
 
-			// Scene tree for context selection
-			scene_tree = memnew(Tree);
+			scene_tree = memnew(KudouTree);
 			scene_tree->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-			scene_tree->set_columns(1); // Explicitly set columns
-			// The item_edited signal is used to propagate checks to children/parents.
-			scene_tree->connect(SNAME("item_edited"), callable_mp(this, &KudouAgentPlugin::_on_item_edited));
+			scene_tree->set_columns(1);
+			scene_tree->set_column_expand(0, true);
 			left_panel->add_child(scene_tree);
 
 			refresh_scene_button = memnew(Button);
@@ -122,9 +110,23 @@ void KudouAgentPlugin::_notification(int p_what) {
 			refresh_scene_button->connect(SNAME("pressed"), callable_mp(this, &KudouAgentPlugin::_on_refresh_scene_button_pressed));
 			left_panel->add_child(refresh_scene_button);
 
-			// Right panel for chat
 			VBoxContainer *right_panel = memnew(VBoxContainer);
 			split_container->add_child(right_panel);
+
+			HBoxContainer *chat_header = memnew(HBoxContainer);
+			right_panel->add_child(chat_header);
+
+			Label *chat_label = memnew(Label);
+			chat_label->set_text(TTR("Kudou Chat"));
+			chat_label->set_h_size_flags(Control::SIZE_EXPAND_FILL); // Make label expand to push settings button to right
+			chat_header->add_child(chat_label);
+
+			Button *header_settings_button = memnew(Button);
+			header_settings_button->set_flat(true);
+			header_settings_button->set_button_icon(editor_node->get_gui_base()->get_theme_icon(SNAME("EditorSettings"), SNAME("EditorIcons")));
+			header_settings_button->set_tooltip_text(TTR("LLM Settings"));
+			header_settings_button->connect(SNAME("pressed"), callable_mp(this, &KudouAgentPlugin::_on_settings_button_pressed));
+			chat_header->add_child(header_settings_button);
 
 			chat_history = memnew(RichTextLabel);
 			chat_history->set_v_size_flags(Control::SIZE_EXPAND_FILL);
@@ -144,26 +146,33 @@ void KudouAgentPlugin::_notification(int p_what) {
 			send_button->connect(SNAME("pressed"), callable_mp(this, &KudouAgentPlugin::_on_send_button_pressed));
 			input_container->add_child(send_button);
 
+			web_chat_button = memnew(OptionButton);
+			web_chat_button->add_item("Kudou API", 0);
+			web_chat_button->add_item("Gemini", 1);
+			web_chat_button->add_item("ChatGPT", 2);
+			web_chat_button->add_item("Perplexity", 3);
+			web_chat_button->add_item("Claude", 4);
+			web_chat_button->select(0);
+			input_container->add_child(web_chat_button);
+
 			edit_mode_checkbox = memnew(CheckBox);
 			edit_mode_checkbox->set_text(TTR("Edit Project Files"));
 			right_panel->add_child(edit_mode_checkbox);
 
-			// Add the control to the dock.
 			add_control_to_dock(DOCK_SLOT_RIGHT_UL, agent_dock);
 
-			// Load LLM settings from EditorSettings and configure the controller.
 			chat_controller->set_api_key(EDITOR_GET("kudou/llm/api_key"));
 			chat_controller->set_model(EDITOR_GET("kudou/llm/model"));
 			chat_controller->set_base_url(EDITOR_GET("kudou/llm/base_url"));
 
-			_on_refresh_scene_button_pressed(); // Initial population
+			_on_refresh_scene_button_pressed();
 
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
 			if (agent_dock) {
 				remove_control_from_docks(agent_dock);
-				memdelete(agent_dock); // agent_dock is not a child, so we must delete it.
+				memdelete(agent_dock);
 				agent_dock = nullptr;
 			}
 		} break;
@@ -171,96 +180,84 @@ void KudouAgentPlugin::_notification(int p_what) {
 }
 
 const Ref<Texture2D> KudouAgentPlugin::get_plugin_icon() const {
-	// Use a built-in icon for the agent.
 	return EditorInterface::get_singleton()->get_base_control()->get_theme_icon(SNAME("Comment"), SNAME("EditorIcons"));
 }
 
 void KudouAgentPlugin::_on_send_button_pressed() {
 	String message = user_input->get_text();
-	if (message.is_empty()) {
+	if (message.is_empty() || send_button->is_disabled()) {
 		return;
 	}
+	send_button->set_disabled(true);
+	user_input->set_editable(false);
+
 	user_input->clear();
 	chat_history->add_text(vformat("You: %s\n", message));
 
-	String context_message = "";
+	// Defer the heavy processing to avoid blocking the UI thread.
+	callable_mp(this, &KudouAgentPlugin::_process_and_send_message).call_deferred(message);
+}
 
-	// 1. Collect all checked non-directory items from the file tree.
+void KudouAgentPlugin::_process_and_send_message(const String &p_message) {
+	String context_message = "";
+	const int MAX_CONTEXT_SIZE = 200000; // 200KB limit to prevent freezing on huge files.
+	bool context_limit_reached = false;
+
 	PackedStringArray collected_paths;
 	if (file_tree && file_tree->get_root()) {
-		_collect_checked_items_recursive(file_tree->get_root(), collected_paths);
+		file_tree->get_checked_items(collected_paths);
 	}
 
-	// 2. Filter out nodes if their parent .tscn is also selected, and filter duplicate dirs/files.
-	PackedStringArray final_paths;
-	HashSet<String> tscn_files_checked;
-	HashSet<String> final_paths_set;
+	HashMap<String, Vector<String>> tscn_nodes_to_process;
 
-	for (const String &path : collected_paths) {
-		if (path.ends_with(".tscn") && !path.contains("::")) {
-			tscn_files_checked.insert(path);
-		}
-	}
-
-	for (const String &path : collected_paths) {
-		if (path.contains("::")) {
-			String tscn_path = path.get_slice("::", 0);
-			if (tscn_files_checked.has(tscn_path)) {
-				continue; // Skip this node, as its parent .tscn file is fully included.
-			}
-		}
-		// Also filter files inside already-checked directories
-		bool skip = false;
-		String current_path = path;
-		while (current_path.contains("/")) {
-			current_path = current_path.get_base_dir();
-			if (final_paths_set.has(current_path)) {
-				skip = true;
-				break;
-			}
-		}
-		if (skip) {
-			continue;
-		}
-
-		if (!final_paths_set.has(path)) {
-			final_paths.push_back(path);
-			final_paths_set.insert(path);
-		}
-	}
-
-	// 3. Build the context string from the final list of files and nodes.
-	for (int i = 0; i < final_paths.size(); ++i) {
-		String item_data = final_paths[i];
-
-		if (DirAccess::dir_exists_absolute(item_data)) {
-			// This logic could be expanded to list files in a directory, but for now we just mention it.
-			context_message += vformat("Directory: %s\n\n", item_data);
-			continue;
-		}
+	for (int i = 0; i < collected_paths.size(); ++i) {
+		String item_data = collected_paths[i];
 
 		if (item_data.contains("::")) {
-			// This is an individual node from a .tscn file.
 			Vector<String> parts = item_data.split("::");
 			String tscn_path = parts[0];
 			String node_name = parts[1];
-			context_message += vformat("Node: %s from %s\n%s\n\n", node_name, tscn_path, _get_tscn_node_data(tscn_path, node_name));
-		} else {
-			// This is a regular file path (or a full .tscn file).
-			String file_path = item_data;
-			Ref<FileAccess> file = FileAccess::open(file_path, FileAccess::READ);
-			if (file.is_valid()) {
-				context_message += vformat("File: %s\n%s\n\n", file_path, file->get_as_text());
-			} else {
-				ERR_PRINT("Could not open file: " + file_path);
+			if (!tscn_nodes_to_process.has(tscn_path)) {
+				tscn_nodes_to_process[tscn_path] = Vector<String>();
 			}
+			tscn_nodes_to_process[tscn_path].push_back(node_name);
+		} else if (DirAccess::dir_exists_absolute(item_data)) {
+			context_message += vformat("Directory: %s\n", item_data);
+		} else {
+			Ref<FileAccess> file = FileAccess::open(item_data, FileAccess::READ);
+			if (file.is_valid()) {
+				uint64_t len = file->get_length();
+				if (context_message.length() + len > MAX_CONTEXT_SIZE) {
+					len = MAX_CONTEXT_SIZE - context_message.length();
+					context_limit_reached = true;
+				}
+				PackedByteArray pba = file->get_buffer(len);
+				String text = String::utf8((const char *)pba.ptr(), pba.size());
+				context_message += vformat("File: %s:\n%s\n", item_data, text);
+			} else {
+				ERR_PRINT("Could not open file: " + item_data);
+			}
+		}
+		if (context_limit_reached) {
+			break;
 		}
 	}
 
-	// 4. Build context from current scene tree.
+	for (const KeyValue<String, Vector<String>> &E : tscn_nodes_to_process) {
+		if (context_limit_reached) {
+			break;
+		}
+		String node_content = _get_multiple_tscn_nodes_data(E.key, E.value);
+		if (context_message.length() + node_content.length() > MAX_CONTEXT_SIZE) {
+			context_limit_reached = true;
+		} else {
+			context_message += vformat("Nodes from %s:\n%s\n", E.key, node_content);
+		}
+	}
+
 	PackedStringArray checked_node_paths;
 	if (scene_tree && scene_tree->get_root()) {
-		checked_node_paths = _get_checked_node_paths(scene_tree->get_root());
+		scene_tree->get_checked_items(checked_node_paths);
 	}
 
 	if (checked_node_paths.size() > 0) {
@@ -270,10 +267,19 @@ void KudouAgentPlugin::_on_send_button_pressed() {
 			for (int i = 0; i < checked_node_paths.size(); ++i) {
 				Node *node = scene_root->get_node_or_null(checked_node_paths[i]);
 				if (node) {
-					context_message += _get_node_data_as_string(node);
+					String node_str = _get_node_data_as_string(node);
+					if (context_message.length() + node_str.length() > MAX_CONTEXT_SIZE) {
+						context_limit_reached = true;
+						break;
+					}
+					context_message += node_str;
 				}
 			}
 		}
+	}
+
+	if (context_limit_reached) {
+		chat_history->add_text("Kudou: [Warning] Context size limit reached. Some content was truncated or skipped.\n");
 	}
 
 	String prompt_template;
@@ -283,17 +289,52 @@ void KudouAgentPlugin::_on_send_button_pressed() {
 		prompt_template = prompts.get("chat_mode_prompt", "");
 	}
 
-	String full_prompt = prompt_template.replace("{message}", message).replace("{context}", context_message);
+	String full_prompt = prompt_template.replace("{message}", p_message).replace("{context}", context_message);
 
-	chat_controller->send_message(full_prompt);
+	int selected_service = web_chat_button->get_selected_id();
+
+	if (selected_service == 0) { // Kudou API
+		chat_controller->send_message(full_prompt);
+	} else {
+		String url;
+		String encoded_prompt = full_prompt.uri_encode();
+		switch (selected_service) {
+			case 1: // Gemini
+				url = "https://gemini.google.com/app?prompt=" + encoded_prompt;
+				break;
+			case 2: // ChatGPT
+				url = "https://chat.openai.com";
+				chat_history->add_text("Kudou: Opening ChatGPT. Please paste the prompt manually.\n");
+				break;
+			case 3: // Perplexity
+				url = "https://www.perplexity.ai/search?q=" + encoded_prompt;
+				break;
+			case 4: // Claude
+				url = "https://claude.ai";
+				chat_history->add_text("Kudou: Opening Claude. Please paste the prompt manually.\n");
+				break;
+		}
+		if (!url.is_empty()) {
+			OS::get_singleton()->shell_open(url);
+			chat_history->add_text(vformat("Kudou: Opening web chat for prompt in your browser.\n"));
+		}
+		_enable_chat_input();
+	}
 }
 
 void KudouAgentPlugin::_on_text_submitted(const String &p_text) {
 	_on_send_button_pressed();
 }
 
+void KudouAgentPlugin::_enable_chat_input() {
+	send_button->set_disabled(false);
+	user_input->set_editable(true);
+	user_input->grab_focus();
+}
+
 void KudouAgentPlugin::_on_chat_message_received(const String &message) {
 	chat_history->add_text(vformat("Kudou: %s\n", message));
+	_enable_chat_input();
 
 	if (edit_mode_checkbox->is_pressed()) {
 		Vector<String> parts = message.split("```");
@@ -335,6 +376,12 @@ void KudouAgentPlugin::_on_settings_changed() {
 	chat_controller->set_base_url(EDITOR_GET("kudou/llm/base_url"));
 }
 
+void KudouAgentPlugin::_on_settings_button_pressed() {
+	EditorSettingsDialog *esd = EditorNode::get_singleton()->get_editor_settings_dialog();
+	esd->set_filter("kudou/llm");
+	esd->popup_edit_settings();
+}
+
 void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeItem *p_parent) {
 	Ref<DirAccess> dir = DirAccess::open(p_path);
 	if (dir.is_null()) {
@@ -353,6 +400,7 @@ void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeI
 		String full_path = p_path.path_join(file);
 		TreeItem *item = file_tree->create_item(p_parent);
 		item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		item->set_editable(0, true);
 		item->set_metadata(0, full_path);
 
 		if (dir->current_is_dir()) {
@@ -360,23 +408,20 @@ void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeI
 			item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
 			_populate_file_tree_recursive(full_path, item);
 		} else {
-			item->set_text(0, vformat("File: %s", file));
+			item->set_text(0, file);
 			if (file.ends_with(".tscn")) {
 				item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("PackedScene"), SNAME("EditorIcons")));
-				// Parse .tscn and add its nodes as children
-				Dictionary tscn_nodes = _parse_tscn_file(full_path);
-				Array node_names = tscn_nodes.keys();
-				for (int i = 0; i < node_names.size(); ++i) {
-					String node_name = node_names[i];
-					Dictionary node_info = tscn_nodes[node_name];
-					TreeItem *node_item = file_tree->create_item(item);
-					node_item->set_text(0, vformat("Node: %s (%s)", node_name, String(node_info["type"])));
-					node_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
-					node_item->set_metadata(0, full_path + "::" + node_name); // Store path and node name
-					node_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons")));
-				}
+				_populate_tscn_nodes_in_tree(item, full_path);
 			} else {
-				item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("File"), SNAME("EditorIcons")));
+				String res_type = EditorFileSystem::get_singleton()->get_file_type(full_path);
+				Ref<Texture2D> file_icon;
+				if (!res_type.is_empty()) {
+					file_icon = editor_node->get_gui_base()->get_theme_icon(res_type, SNAME("EditorIcons"));
+				}
+				if (file_icon.is_null()) {
+					file_icon = editor_node->get_gui_base()->get_theme_icon(SNAME("Object"), SNAME("EditorIcons"));
+				}
+				item->set_icon(0, file_icon);
 			}
 		}
 		file = dir->get_next();
@@ -384,28 +429,23 @@ void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeI
 	dir->list_dir_end();
 }
 
+void KudouAgentPlugin::_on_filesystem_changed() {
+	file_tree->clear();
+	TreeItem *file_root_item = file_tree->create_item();
+	file_root_item->set_text(0, "res://");
+	file_root_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
+	file_root_item->set_collapsed(false);
+	file_root_item->set_metadata(0, "res://");
+	file_root_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+	file_root_item->set_editable(0, true);
+	_populate_file_tree(file_root_item);
+}
+
 void KudouAgentPlugin::_populate_file_tree(TreeItem *p_root) {
 	_populate_file_tree_recursive("res://", p_root);
 }
 
-void KudouAgentPlugin::_collect_checked_items_recursive(TreeItem *p_item, PackedStringArray &r_paths) {
-	if (!p_item) {
-		return;
-	}
-
-	if (p_item->is_checked(0)) {
-		String path = p_item->get_metadata(0);
-		r_paths.push_back(path);
-	}
-
-	// Always recurse into children to find more checked items.
-	// The sending logic will handle filtering out children of checked parents.
-	for (TreeItem *child = p_item->get_first_child(); child; child = child->get_next()) {
-		_collect_checked_items_recursive(child, r_paths);
-	}
-}
-
-String KudouAgentPlugin::_get_tscn_node_data(const String &p_tscn_path, const String &p_node_name) {
+String KudouAgentPlugin::_get_multiple_tscn_nodes_data(const String &p_tscn_path, const Vector<String> &p_node_names) {
 	Ref<FileAccess> file = FileAccess::open(p_tscn_path, FileAccess::READ);
 	if (file.is_null()) {
 		ERR_PRINT("Could not open .tscn file: " + p_tscn_path);
@@ -414,24 +454,34 @@ String KudouAgentPlugin::_get_tscn_node_data(const String &p_tscn_path, const St
 
 	String content = file->get_as_text();
 	Vector<String> lines = content.split("\n");
-	String node_data = "";
-	bool found_node = false;
+	String result_data;
 
-	for (int i = 0; i < lines.size(); ++i) {
-		String line = lines[i].strip_edges();
-		if (!found_node) {
-			if (line.begins_with("[node") && line.contains(vformat("name=\"%s\"", p_node_name))) {
-				found_node = true;
+	for (const String &node_name : p_node_names) {
+		String node_data;
+		bool found_node = false;
+		for (int i = 0; i < lines.size(); ++i) {
+			String line = lines[i].strip_edges();
+			if (!found_node) {
+				if (line.begins_with("[node") && line.contains(vformat("name=\"%s\"", node_name))) {
+					found_node = true;
+					node_data += line + "\n";
+				}
+			} else {
+				if (line.begins_with("[node") || line.begins_with("[ext_resource") || line.begins_with("[sub_resource") || line.begins_with("[connection")) {
+					break;
+				}
 				node_data += line + "\n";
 			}
-		} else {
-			if (line.begins_with("[node") || line.begins_with("[ext_resource") || line.begins_with("[sub_resource") || line.begins_with("[connection")) {
-				break; // Reached the next section, stop collecting
-			}
-			node_data += line + "\n";
 		}
+		result_data += node_data + "\n";
 	}
-	return node_data;
+	return result_data;
+}
+
+String KudouAgentPlugin::_get_tscn_node_data(const String &p_tscn_path, const String &p_node_name) {
+	Vector<String> node_names;
+	node_names.push_back(p_node_name);
+	return _get_multiple_tscn_nodes_data(p_tscn_path, node_names);
 }
 
 void KudouAgentPlugin::_on_refresh_scene_button_pressed() {
@@ -439,41 +489,20 @@ void KudouAgentPlugin::_on_refresh_scene_button_pressed() {
 	TreeItem *root_item = scene_tree->create_item();
 	Node *scene_root = editor_node->get_edited_scene();
 	if (scene_root) {
-		root_item->set_text(0, "Node: " + scene_root->get_name());
-		root_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons")));
-		root_item->set_metadata(0, NodePath(".")); // Use relative path for root.
+		root_item->set_text(0, scene_root->get_name());
+		String node_type = scene_root->get_class();
+		Ref<Texture2D> node_icon = editor_node->get_gui_base()->get_theme_icon(node_type, SNAME("EditorIcons"));
+		if (node_icon.is_null()) {
+			node_icon = editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons"));
+		}
+		root_item->set_icon(0, node_icon);
+		root_item->set_metadata(0, NodePath("."));
 		root_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		root_item->set_editable(0, true);
 		_populate_scene_tree_recursive(scene_root, root_item);
 	} else {
 		root_item->set_text(0, "No scene loaded.");
-	}
-}
-
-void KudouAgentPlugin::_on_item_edited() {
-	// The item_edited signal has no parameters, so we get the edited item from the tree.
-	// We need to figure out which tree sent the signal. We can check which one has an edited item.
-	Tree *edited_tree = nullptr;
-	if (file_tree && file_tree->get_edited()) {
-		edited_tree = file_tree;
-	} else if (scene_tree && scene_tree->get_edited()) {
-		edited_tree = scene_tree;
-	}
-
-	if (!edited_tree) {
-		return;
-	}
-
-	TreeItem *item = edited_tree->get_edited();
-	if (!item) {
-		return;
-	}
-
-	int column = edited_tree->get_edited_column();
-	if (item->get_cell_mode(column) == TreeItem::CELL_MODE_CHECK) {
-		// This will handle checking/unchecking children and updating parent states.
-		// The second argument determines if `check_propagated_to_item` signal is emitted for each item.
-		// Since we are not listening to that signal, 'false' is more efficient.
-		item->propagate_check(column, false);
+		root_item->set_custom_color(0, Color(1, 1, 1, 0.5));
 	}
 }
 
@@ -481,31 +510,21 @@ void KudouAgentPlugin::_populate_scene_tree_recursive(Node *p_node, TreeItem *p_
 	for (int i = 0; i < p_node->get_child_count(); ++i) {
 		Node *child = p_node->get_child(i);
 		if (child->get_owner() != editor_node->get_edited_scene()) {
-			continue; // Only show nodes owned by the scene
+			continue;
 		}
 		TreeItem *item = scene_tree->create_item(p_parent);
-		item->set_text(0, "Node: " + child->get_name());
-		item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons")));
+		item->set_text(0, child->get_name());
+		String node_type = child->get_class();
+		Ref<Texture2D> node_icon = editor_node->get_gui_base()->get_theme_icon(node_type, SNAME("EditorIcons"));
+		if (node_icon.is_null()) {
+			node_icon = editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons"));
+		}
+		item->set_icon(0, node_icon);
 		item->set_metadata(0, editor_node->get_edited_scene()->get_path_to(child));
 		item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		item->set_editable(0, true);
 		_populate_scene_tree_recursive(child, item);
 	}
-}
-
-PackedStringArray KudouAgentPlugin::_get_checked_node_paths(TreeItem *p_item) {
-	PackedStringArray checked_nodes;
-	if (!p_item) {
-		return checked_nodes;
-	}
-
-	if (p_item->is_checked(0)) {
-		checked_nodes.push_back(p_item->get_metadata(0));
-	}
-
-	for (TreeItem *child = p_item->get_first_child(); child; child = child->get_next()) {
-		checked_nodes.append_array(_get_checked_node_paths(child));
-	}
-	return checked_nodes;
 }
 
 String KudouAgentPlugin::_get_node_data_as_string(Node *p_node) {
@@ -558,7 +577,6 @@ void KudouAgentPlugin::_load_prompts() {
 			ERR_PRINT("prompts.json does not exist and could not be created at: " + prompts_path);
 			return;
 		}
-		// Use a multiline string for readability.
 		f->store_string("{\n"
 						"    \"chat_mode_prompt\": \"You are an AI assistant for Godot Engine. Answer the user's question based on the provided context. If you don't know the answer, say so. User message: {message}\\nContext: {context}\",\n"
 						"    \"edit_mode_prompt\": \"You are an AI assistant for Godot Engine. The user wants to modify their project files. Provide code snippets to modify the files. Use the following format for modifications: ```\\n<file_path>\\n<old_code>\\n---\\n<new_code>\\n```. User message: {message}\\nContext: {context}\"\n"
@@ -579,36 +597,75 @@ void KudouAgentPlugin::_load_prompts() {
 	}
 }
 
+void KudouAgentPlugin::_populate_tscn_nodes_in_tree(TreeItem *p_tscn_item, const String &p_path) {
+	Dictionary tscn_nodes = _parse_tscn_file(p_path);
+	Array node_names = tscn_nodes.keys();
+	HashMap<String, TreeItem *> item_map;
+
+	// First pass: create all items and store them in a map.
+	for (int i = 0; i < node_names.size(); ++i) {
+		String node_name = node_names[i];
+		Dictionary node_info = tscn_nodes[node_name];
+		String node_type = node_info["type"];
+
+		TreeItem *node_item = file_tree->create_item(); // Don't parent yet.
+		node_item->set_text(0, node_name);
+		node_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		node_item->set_editable(0, true);
+		node_item->set_metadata(0, p_path + "::" + node_name);
+		Ref<Texture2D> node_icon = editor_node->get_gui_base()->get_theme_icon(node_type, SNAME("EditorIcons"));
+		if (node_icon.is_null()) {
+			node_icon = editor_node->get_gui_base()->get_theme_icon(SNAME("Node"), SNAME("EditorIcons"));
+		}
+		node_item->set_icon(0, node_icon);
+		item_map[node_name] = node_item;
+	}
+
+	// Second pass: establish hierarchy.
+	for (int i = 0; i < node_names.size(); ++i) {
+		String node_name = node_names[i];
+		Dictionary node_info = tscn_nodes[node_name];
+		String parent_path_str = node_info.get("parent", ".");
+
+		TreeItem *child_item = item_map[node_name];
+		TreeItem *parent_item = p_tscn_item; // Default to the scene file root.
+
+		if (parent_path_str != ".") {
+			NodePath parent_path(parent_path_str);
+			if (parent_path.get_name_count() > 0) {
+				// This simplified logic assumes the parent is directly addressable by its name.
+				// It works for `parent="Arm"` but might need enhancement for `parent="Arm/Hand"`.
+				String parent_name = parent_path.get_name(parent_path.get_name_count() - 1);
+				if (item_map.has(parent_name)) {
+					parent_item = item_map[parent_name];
+				}
+			}
+		}
+		parent_item->add_child(child_item);
+	}
+}
+
 Dictionary KudouAgentPlugin::_parse_tscn_file(const String &p_path) {
 	Dictionary nodes_data;
-	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::READ);
-	if (file.is_null()) {
-		ERR_PRINT("Could not open .tscn file: " + p_path);
+	Ref<ConfigFile> cf = memnew(ConfigFile);
+	Error err = cf->load(p_path);
+	if (err != OK) {
+		ERR_PRINT("Error loading TSCN as ConfigFile: " + p_path);
 		return nodes_data;
 	}
 
-	String content = file->get_as_text();
-	Vector<String> lines = content.split("\n");
+	Vector<String> sections = cf->get_sections();
 
-	for (int i = 0; i < lines.size(); ++i) {
-		String line = lines[i].strip_edges();
-		if (line.begins_with("[node")) {
-			int name_start = line.find("name=\"") + String("name=\"").length();
-			int name_end = line.find("\"", name_start);
-			if (name_start < name_end) {
-				String node_name = line.substr(name_start, name_end - name_start);
+	for (const String &section : sections) {
+		if (section.begins_with("node ")) {
+			String node_name = cf->get_value(section, "name", "");
+			String node_type = cf->get_value(section, "type", "Node");
+			String parent_path = cf->get_value(section, "parent", ".");
 
-				int type_start = line.find("type=\"") + String("type=\"").length();
-				int type_end = line.find("\"", type_start);
-				String node_type = "Unknown";
-				if (type_start < type_end) {
-					node_type = line.substr(type_start, type_end - type_start);
-				}
-
+			if (!node_name.is_empty()) {
 				Dictionary node_info;
-				node_info["name"] = node_name;
 				node_info["type"] = node_type;
-
+				node_info["parent"] = parent_path;
 				nodes_data[node_name] = node_info;
 			}
 		}
