@@ -1,6 +1,8 @@
 #include "kudou_chat_controller.h"
 
 #include "core/io/json.h"
+#include "core/io/file_access.h"
+#include "servers/display_server.h"
 
 void KudouChatController::_bind_methods() {
 	ADD_SIGNAL(MethodInfo(SNAME("message_received"), PropertyInfo(Variant::STRING, "message")));
@@ -12,6 +14,7 @@ void KudouChatController::_notification(int p_what) {
 		http_request = memnew(HTTPRequest);
 		add_child(http_request);
 		http_request->connect("request_completed", callable_mp(this, &KudouChatController::_http_request_completed));
+        webchat_options.push_back("AiStudio");
 	}
 }
 
@@ -76,7 +79,7 @@ void KudouChatController::_emit_message_deferred(const String &p_message) {
 	emit_signal(SNAME("request_finished"));
 }
 
-void KudouChatController::send_message(const String &p_message) {
+void KudouChatController::send_message(const String &p_message, const String &p_webchat) {
 	if (!http_request) {
 		ERR_PRINT("HTTPRequest node not ready.");
 		callable_mp(this, &KudouChatController::_emit_message_deferred).call_deferred("Error: HTTPRequest node not ready.");
@@ -89,7 +92,12 @@ void KudouChatController::send_message(const String &p_message) {
 		return;
 	}
 
-	String url = base_url + "/models/" + model + ":generateContent?key=" + api_key;
+    String url;
+    if (p_webchat == "AiStudio") {
+        url = base_url + "/v1beta/models/" + model + ":generateContent?key=" + api_key;
+    } else {
+        url = base_url + "/models/" + model + ":generateContent?key=" + api_key;
+    }
 
 	Dictionary content_part;
 	content_part["text"] = p_message;
@@ -129,6 +137,32 @@ void KudouChatController::set_model(const String &p_model) {
 
 void KudouChatController::set_base_url(const String &p_base_url) {
 	base_url = p_base_url;
+}
+
+void KudouChatController::set_webchat_options(const PackedStringArray &p_options) {
+    webchat_options = p_options;
+}
+
+PackedStringArray KudouChatController::get_webchat_options() const {
+    return webchat_options;
+}
+
+String KudouChatController::format_prompt(const String &p_prompt, const PackedStringArray &p_file_paths) {
+    String formatted_prompt = p_prompt;
+    for (int i = 0; i < p_file_paths.size(); i++) {
+        String file_path = p_file_paths[i];
+        Ref<FileAccess> file = FileAccess::open(file_path, FileAccess::READ);
+        if (file.is_valid()) {
+            String content = file->get_as_text();
+            String file_extension = file_path.get_extension();
+            formatted_prompt += vformat("<file path = \"%s\"><![CDATA[```%s%s```]]></file>", file_path.get_file(), file_extension, content);
+        }
+    }
+    return formatted_prompt;
+}
+
+void KudouChatController::copy_to_clipboard(const String &p_text) {
+    DisplayServer::get_singleton()->clipboard_set(p_text);
 }
 
 KudouChatController::KudouChatController() {

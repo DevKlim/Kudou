@@ -2,6 +2,9 @@
 
 #include "core/string/string_name.h" // Required for SNAME
 #include "scene/gui/tree.h" // Required for Tree and TreeItem
+#include "editor/editor_node.h"
+#include "editor/themes/editor_scale.h"
+#include "scene/main/scene_tree.h"
 
 void KudouTree::_bind_methods() {
 	// No methods are exposed to scripting API yet.
@@ -128,4 +131,43 @@ void KudouTree::_get_checked_items_recursive(TreeItem *p_item, PackedStringArray
 	for (TreeItem *child = p_item->get_first_child(); child; child = child->get_next()) {
 		_get_checked_items_recursive(child, r_items);
 	}
+}
+
+void KudouTree::_clear_tree() {
+    clear();
+    if (get_root()) {
+        get_root()->clear_children();
+    }
+}
+
+void KudouTree::_update_scene_tree(Node *p_node) {
+    update_tree();
+}
+
+void KudouTree::update_tree() {
+    _clear_tree();
+    SceneTree *st = get_tree();
+    if (st) {
+        Node *scene_root = st->get_edited_scene_root();
+        if (scene_root) {
+            _add_nodes_recursively(scene_root, nullptr);
+        }
+    }
+}
+
+void KudouTree::_add_nodes_recursively(Node *p_node, TreeItem *p_parent_item) {
+    if (!p_node) {
+        return;
+    }
+
+    TreeItem *item = create_item(p_parent_item);
+    item->set_text(0, p_node->get_name());
+    item->set_icon(0, EditorNode::get_singleton()->get_object_icon(p_node, "Node"));
+    item->set_metadata(0, p_node->get_path());
+    item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+
+
+    for (int i = 0; i < p_node->get_child_count(); i++) {
+        _add_nodes_recursively(p_node->get_child(i), item);
+    }
 }

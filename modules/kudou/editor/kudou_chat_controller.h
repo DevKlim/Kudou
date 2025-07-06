@@ -22,8 +22,13 @@ public:
 	void set_base_url(const String &p_base_url);
 	String get_base_url() const;
 
+    void set_webchat_options(const PackedStringArray &p_options);
+    PackedStringArray get_webchat_options() const;
+
 	// Public Methods
-	void send_message(const String &p_message);
+	void send_message(const String &p_message, const String &p_webchat);
+    String format_prompt(const String &p_prompt, const PackedStringArray &p_file_paths);
+    void copy_to_clipboard(const String &p_text);
 
 protected:
 	// Godot's lifecycle and binding methods
@@ -36,10 +41,11 @@ private:
 	String api_key;
 	String model;
 	String base_url;
+    PackedStringArray webchat_options;
 	HTTPRequest *http_request = nullptr;
 
 	// Internal helper methods
 	void _emit_message_deferred(const String &p_message);
 };
 
-#endif // KUDOU_CHAT_CONTROLLER_H
+#endif // KUDOU_CHAT_CONTROLLER_H'''

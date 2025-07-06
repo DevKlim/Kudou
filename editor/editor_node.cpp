@@ -5207,7 +5207,9 @@ Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, cons
 		// If the fallback is empty or wasn't found, use the default fallback.
 		if (ClassDB::class_exists(p_class)) {
 			bool instantiable = !ClassDB::is_virtual(p_class) && ClassDB::can_instantiate(p_class);
-			if (ClassDB::is_parent_class(p_class, SNAME("Node"))) {
+			if (ClassDB::is_parent_class(p_class, SNAME("Node2D"))) {
+				return theme->get_icon(instantiable ? "Node2D" : "Node2DDisabled", EditorStringName(EditorIcons));
+			} else if (ClassDB::is_parent_class(p_class, SNAME("Node"))) {
 				return theme->get_icon(instantiable ? "Node" : "NodeDisabled", EditorStringName(EditorIcons));
 			} else {
 				return theme->get_icon(instantiable ? "Object" : "ObjectDisabled", EditorStringName(EditorIcons));
