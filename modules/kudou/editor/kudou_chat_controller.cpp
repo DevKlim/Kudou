@@ -162,6 +162,7 @@ String KudouChatController::format_prompt(const String &p_prompt, const PackedSt
 }
 
 void KudouChatController::copy_to_clipboard(const String &p_text) {
+
     DisplayServer::get_singleton()->clipboard_set(p_text);
 }
 

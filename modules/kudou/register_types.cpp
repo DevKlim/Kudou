@@ -8,7 +8,7 @@
 #include "editor/editor_node.h"
 #include "editor/plugins/editor_plugin.h"
 #include "modules/kudou/editor/kudou_agent_plugin.h"
-#include "modules/kudou/editor/kudou_tree.h"
+
 #endif
 
 #include "modules/kudou/editor/kudou_chat_controller.h"
@@ -29,7 +29,7 @@ void initialize_kudou_module(ModuleInitializationLevel p_level) {
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
 		ClassDB::register_class<KudouAgentPlugin>();
-		ClassDB::register_class<KudouTree>();
+		
 		_editor_init_callback();
 	}
 #endif

@@ -24,11 +24,12 @@
 #include "scene/gui/option_button.h"
 #include "scene/gui/rich_text_label.h"
 #include "scene/gui/split_container.h"
+#include "scene/gui/tree.h"
 #include "scene/resources/packed_scene.h"
 #include "servers/display_server.h"
 
+#include "editor/scene_tree_dock.h"
 #include "modules/kudou/editor/kudou_chat_controller.h"
-#include "modules/kudou/editor/kudou_tree.h"
 
 void KudouAgentPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_process_and_send_message", "message"), &KudouAgentPlugin::_process_and_send_message);
@@ -88,11 +89,12 @@ void KudouAgentPlugin::_notification(int p_what) {
 			file_tree_label->set_text(TTR("Project Files Context"));
 			left_panel->add_child(file_tree_label);
 
-			file_tree = memnew(KudouTree);
+			file_tree = memnew(Tree);
 			file_tree->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-			file_tree->set_columns(1);
-			file_tree->set_column_expand(0, true);
 			left_panel->add_child(file_tree);
+			file_tree->connect(SNAME("item_edited"), callable_mp(this, &KudouAgentPlugin::_on_item_edited));
+			file_tree->set_columns(1);
+			file_tree->set_hide_root(true);
 
 			_on_filesystem_changed(); // Initial population.
 
@@ -114,7 +116,7 @@ void KudouAgentPlugin::_notification(int p_what) {
 			header_settings_button->connect(SNAME("pressed"), callable_mp(this, &KudouAgentPlugin::_on_settings_button_pressed));
 			chat_header->add_child(header_settings_button);
 
-						chat_history = memnew(RichTextLabel);
+			chat_history = memnew(RichTextLabel);
 			chat_history->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 			chat_history->set_selection_enabled(true);
 			right_panel->add_child(chat_history);
@@ -200,7 +202,7 @@ void KudouAgentPlugin::_process_and_send_message(const String &p_message) {
 
 	PackedStringArray collected_paths;
 	if (file_tree && file_tree->get_root()) {
-		file_tree->get_checked_items(collected_paths);
+		_get_checked_items_recursive(file_tree->get_root(), collected_paths);
 	}
 
 	HashMap<String, Vector<String>> tscn_nodes_to_process;
@@ -359,94 +361,200 @@ void KudouAgentPlugin::_on_settings_button_pressed() {
 	esd->popup_edit_settings();
 }
 
-void KudouAgentPlugin::_populate_file_tree_recursive(const String &p_path, TreeItem *p_parent) {
-	Ref<DirAccess> dir = DirAccess::open(p_path);
-	if (dir.is_null()) {
-		ERR_PRINT("Could not open directory: " + p_path);
+void KudouAgentPlugin::_on_filesystem_changed() {
+	if (!file_tree) {
+		return;
+	}
+	file_tree->clear();
+	TreeItem *root = file_tree->create_item();
+	_populate_file_tree(EditorFileSystem::get_singleton()->get_filesystem(), root);
+}
+
+void KudouAgentPlugin::_populate_file_tree(EditorFileSystemDirectory *p_dir, TreeItem *p_parent) {
+	if (!p_dir) {
 		return;
 	}
 
-	dir->list_dir_begin();
-	String file = dir->get_next();
-	while (!file.is_empty()) {
-		if (file == "." || file == ".." || file.begins_with(".")) {
-			file = dir->get_next();
-			continue;
+	// Subdirectories
+	for (int i = 0; i < p_dir->get_subdir_count(); ++i) {
+		EditorFileSystemDirectory *subdir = p_dir->get_subdir(i);
+		TreeItem *dir_item = file_tree->create_item(p_parent);
+		dir_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		dir_item->set_text(0, subdir->get_name() + "/");
+		dir_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
+		dir_item->set_editable(0, true);
+		dir_item->set_metadata(0, subdir->get_path());
+		_populate_file_tree(subdir, dir_item);
+	}
+
+	// Files
+	for (int i = 0; i < p_dir->get_file_count(); ++i) {
+		String file_name = p_dir->get_file(i);
+		String file_path = p_dir->get_file_path(i);
+		String file_type = p_dir->get_file_type(i);
+
+		TreeItem *file_item = file_tree->create_item(p_parent);
+		file_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+		file_item->set_text(0, file_name);
+		file_item->set_editable(0, true);
+		file_item->set_metadata(0, file_path);
+
+		// Use file type to get icon, fallback to a generic icon if not found
+		if (editor_node->get_gui_base()->has_theme_icon(file_type, SNAME("EditorIcons"))) {
+			file_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(file_type, SNAME("EditorIcons")));
+		} else {
+			file_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Object"), SNAME("EditorIcons")));
 		}
 
-		String full_path = p_path.path_join(file);
-		TreeItem *item = file_tree->create_item(p_parent);
-		item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
-		item->set_editable(0, true);
-		item->set_metadata(0, full_path);
+		if (file_type == "PackedScene" && (file_path.ends_with(".tscn") || file_path.ends_with(".scn"))) {
+			_populate_nodes_for_tscn(file_item, file_path);
+		}
+	}
+}
 
-		if (dir->current_is_dir()) {
-			item->set_text(0, file);
-			item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
-			_populate_file_tree_recursive(full_path, item);
-		} else {
-			item->set_text(0, file);
-			if (file.ends_with(".tscn")) {
-				item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("PackedScene"), SNAME("EditorIcons")));
-			    Ref<PackedScene> packed_scene = ResourceLoader::load(full_path);
-				if (packed_scene.is_valid()) {
-					Ref<SceneState> state = packed_scene->get_state();
-					for (int i = 0; i < state->get_node_count(); i++) {
-						if (state->get_node_path(i, true).is_empty()) {
-							_add_nodes_to_file_tree_recursively(state, item, full_path, i, "");
-						}
-					}
-				}
+void KudouAgentPlugin::_populate_nodes_for_tscn(TreeItem *p_tscn_item, const String &p_path) {
+	Ref<PackedScene> packed_scene = ResourceLoader::load(p_path);
+	if (packed_scene.is_null()) {
+		WARN_PRINT(vformat("Kudou: Failed to load PackedScene at %s", p_path));
+		return;
+	}
+
+	Node *scene_root = packed_scene->instantiate(PackedScene::GEN_EDIT_STATE_DISABLED);
+	if (!scene_root) {
+		WARN_PRINT(vformat("Kudou: Failed to instantiate scene from %s", p_path));
+		return;
+	}
+
+	_populate_node_items_recursive(scene_root, p_tscn_item, scene_root, p_path);
+
+	scene_root->queue_free();
+}
+
+void KudouAgentPlugin::_populate_node_items_recursive(Node *p_node, TreeItem *p_parent_item, Node *p_scene_root, const String &p_tscn_path) {
+	if (!p_node) {
+		return;
+	}
+
+	TreeItem *node_item = file_tree->create_item(p_parent_item);
+	node_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+	node_item->set_text(0, p_node->get_name());
+	node_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(p_node->get_class(), SNAME("EditorIcons")));
+	node_item->set_editable(0, true);
+
+	NodePath path_to_node = p_scene_root->get_path_to(p_node);
+	String meta = p_tscn_path + "::" + String(path_to_node);
+	node_item->set_metadata(0, meta);
+
+	for (int i = 0; i < p_node->get_child_count(); i++) {
+		_populate_node_items_recursive(p_node->get_child(i), node_item, p_scene_root, p_tscn_path);
+	}
+}
+
+void KudouAgentPlugin::_on_item_edited() {
+	TreeItem *item = file_tree->get_edited();
+	if (!item) {
+		return;
+	}
+
+	int col = file_tree->get_edited_column();
+	// We only care about checkbox clicks in the first column.
+	if (col != 0 || item->get_cell_mode(col) != TreeItem::CELL_MODE_CHECK) {
+		return;
+	}
+
+	// When an item is checked/unchecked by the user, it can't be indeterminate.
+	item->set_indeterminate(col, false);
+
+	bool checked = item->is_checked(col);
+
+	// Propagate to children.
+	_propagate_check_down(item, checked);
+
+	// Propagate to parents.
+	_update_parent_check_state(item);
+}
+
+void KudouAgentPlugin::_propagate_check_down(TreeItem *p_item, bool p_checked) {
+	if (!p_item) {
+		return;
+	}
+	for (TreeItem *child = p_item->get_first_child(); child; child = child->get_next()) {
+		if (child->get_cell_mode(0) == TreeItem::CELL_MODE_CHECK) {
+			child->set_checked(0, p_checked);
+			// When a child's state is explicitly set, it should no longer be indeterminate.
+			child->set_indeterminate(0, false);
+			_propagate_check_down(child, p_checked);
+		}
+	}
+}
+
+void KudouAgentPlugin::_update_parent_check_state(TreeItem *p_item) {
+	if (!p_item || !p_item->get_parent()) {
+		return;
+	}
+
+	TreeItem *parent = p_item->get_parent();
+	if (parent->get_cell_mode(0) != TreeItem::CELL_MODE_CHECK) {
+		return;
+	}
+
+	bool all_checked = true;
+	bool any_checked = false;
+	bool any_indeterminate = false;
+
+	for (TreeItem *child = parent->get_first_child(); child; child = child->get_next()) {
+		if (child->get_cell_mode(0) == TreeItem::CELL_MODE_CHECK) {
+			if (child->is_indeterminate(0)) {
+				any_indeterminate = true;
+				break; // If any child is indeterminate, the parent must be indeterminate.
+			}
+			if (child->is_checked(0)) {
+				any_checked = true;
 			} else {
-				String res_type = EditorFileSystem::get_singleton()->get_file_type(full_path);
-				Ref<Texture2D> file_icon;
-				if (!res_type.is_empty()) {
-					file_icon = editor_node->get_gui_base()->get_theme_icon(res_type, SNAME("EditorIcons"));
-				}
-				if (file_icon.is_null()) {
-					file_icon = editor_node->get_gui_base()->get_theme_icon(SNAME("Object"), SNAME("EditorIcons"));
-				}
-				item->set_icon(0, file_icon);
+				all_checked = false;
 			}
 		}
-		file = dir->get_next();
 	}
-	dir->list_dir_end();
-}
 
-void KudouAgentPlugin::_on_filesystem_changed() {
-	file_tree->clear();
-	TreeItem *file_root_item = file_tree->create_item();
-	file_root_item->set_text(0, "res://");
-	file_root_item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
-	file_root_item->set_collapsed(false);
-	file_root_item->set_metadata(0, "res://");
-	file_root_item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
-	file_root_item->set_editable(0, true);
-	_populate_file_tree(file_root_item);
-}
-
-void KudouAgentPlugin::_populate_file_tree(TreeItem *p_root) {
-	_populate_file_tree_recursive("res://", p_root);
-}
-
-void KudouAgentPlugin::_add_nodes_to_file_tree_recursively(Ref<SceneState> p_scene_state, TreeItem *p_parent_item, const String &p_tscn_path, int p_node_idx, const String &p_parent_path) {
-	String node_name = p_scene_state->get_node_name(p_node_idx);
-	String node_type = p_scene_state->get_node_type(p_node_idx);
-	String current_path = p_parent_path.is_empty() ? node_name : p_parent_path + "/" + node_name;
-
-	TreeItem *item = file_tree->create_item(p_parent_item);
-	item->set_text(0, node_name);
-	item->set_icon(0, editor_node->get_gui_base()->get_theme_icon(node_type, SNAME("EditorIcons")));
-	item->set_metadata(0, p_tscn_path + "::" + current_path);
-	item->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
-	item->set_editable(0, true);
-
-	NodePath node_path = p_scene_state->get_node_path(p_node_idx);
-	for (int i = 0; i < p_scene_state->get_node_count(); i++) {
-		if (p_scene_state->get_node_path(i, true) == node_path) {
-			_add_nodes_to_file_tree_recursively(p_scene_state, item, p_tscn_path, i, current_path);
+	bool state_changed = false;
+	if (any_indeterminate || (any_checked && !all_checked)) {
+		// Parent should be indeterminate if any child is indeterminate, or if some but not all children are checked.
+		if (!parent->is_indeterminate(0)) {
+			parent->set_indeterminate(0, true);
+			state_changed = true;
 		}
+	} else {
+		// Parent should be fully checked if all children are checked, or unchecked if no children are checked.
+		if (parent->is_indeterminate(0) || parent->is_checked(0) != all_checked) {
+			parent->set_checked(0, all_checked); // This also sets indeterminate to false.
+			state_changed = true;
+		}
+	}
+
+	if (state_changed) {
+		// Recursively update the parent's parent.
+		_update_parent_check_state(parent);
+	}
+}
+
+void KudouAgentPlugin::_get_checked_items_recursive(TreeItem *p_item, PackedStringArray &r_items) {
+	if (!p_item) {
+		return;
+	}
+
+	// If an item is checked, we add it and don't look at its children,
+	// as the parent's context is assumed to include all children.
+	if (p_item->is_checked(0)) {
+		String path = p_item->get_metadata(0);
+		if (!path.is_empty()) {
+			r_items.push_back(path);
+		}
+		return; // Stop recursion here.
+	}
+
+	// If an item is not checked (could be indeterminate), we need to check its children.
+	for (TreeItem *child = p_item->get_first_child(); child; child = child->get_next()) {
+		_get_checked_items_recursive(child, r_items);
 	}
 }
 
@@ -524,8 +632,7 @@ void KudouAgentPlugin::_load_prompts() {
 		} else {
 			ERR_PRINT("Error parsing prompts.json: " + json->get_error_message() + " at line " + itos(json->get_error_line()));
 		}
-	}
-	else {
+	} else {
 		ERR_PRINT("Could not open prompts.json file: " + prompts_path);
 	}
 }

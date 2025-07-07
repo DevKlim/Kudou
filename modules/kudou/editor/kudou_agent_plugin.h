@@ -12,9 +12,11 @@ class Label;
 class LineEdit;
 class OptionButton;
 class RichTextLabel;
-class KudouTree;
+class Tree;
 class TreeItem;
 class KudouChatController;
+class EditorFileSystemDirectory; // Added this forward declaration
+class Node; // Added this forward declaration for _populate_node_items_recursive
 
 class KudouAgentPlugin : public EditorPlugin {
 	GDCLASS(KudouAgentPlugin, EditorPlugin);
@@ -25,11 +27,19 @@ private:
 	RichTextLabel *chat_history = nullptr;
 	LineEdit *user_input = nullptr;
 	Button *send_button = nullptr;
-	KudouTree *file_tree = nullptr;
+	Tree *file_tree = nullptr;
 	CheckBox *edit_mode_checkbox = nullptr;
 	OptionButton *web_chat_button = nullptr;
 	KudouChatController *chat_controller = nullptr;
 	Dictionary prompts;
+
+	// New private helper methods for tree management
+	void _propagate_check_down(TreeItem *p_item, bool p_checked);
+	void _update_parent_check_state(TreeItem *p_item);
+	void _get_checked_items_recursive(TreeItem *p_item, PackedStringArray &r_items);
+	void _populate_file_tree(EditorFileSystemDirectory *p_dir, TreeItem *p_parent);
+	void _populate_nodes_for_tscn(TreeItem *p_tscn_item, const String &p_path);
+	void _populate_node_items_recursive(Node *p_node, TreeItem *p_parent_item, Node *p_scene_root, const String &p_tscn_path);
 
 protected:
 	void _notification(int p_what);
@@ -42,11 +52,8 @@ protected:
 	void _on_settings_button_pressed();
 	void _enable_chat_input();
 	void _on_filesystem_changed();
-
-	// File tree helpers
-	void _populate_file_tree(TreeItem *p_root);
-	void _populate_file_tree_recursive(const String &p_path, TreeItem *p_parent);
-	void _add_nodes_to_file_tree_recursively(Ref<SceneState> p_scene_state, TreeItem *p_parent_item, const String &p_tscn_path, int p_node_idx, const String &p_parent_path);
+	// Removed: void _add_checkboxes_to_tree(TreeItem *p_item);
+	void _on_item_edited();
 
 	// General helpers
 	void _load_prompts();
