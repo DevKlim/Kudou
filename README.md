@@ -12,9 +12,9 @@
 
 ## The power of Godot, supercharged with AI.
 
-**Kudou** is a fork of the incredible **[Godot Engine](https://godotengine.org)**, reimagined to integrate AI solutions and agentic workflows directly into the game development process. Our mission is to make creating games dramatically faster and more accessible by leveraging the power of Large Language Models (LLMs).
+**Kudou** is a fork of the incredible **[Godot Engine](https://godotengine.org)**, reimagined to integrate AI solutions and agentic workflows directly into the game development process. Our mission is to make creating games dramatically faster and more accessible by leveraging the power of Large Language Models.
 
-Think of Kudou as a "Cursor for Godot"—an intelligent partner that helps you code, design, and create. By connecting to your preferred AI APIs or using web-based tools in the integrated browser, Kudou provides a suite of features to automate tedious tasks, generate code, and offer intelligent assistance, allowing you to focus on your creative vision.
+Think of Kudou as a "Cursor for Godot"! It's an intelligent partner that helps you code, design, and create! By connecting to your preferred AI APIs or using web-based tools in the integrated browser, Kudou provides a suite of features to automate tedious tasks, generate code, and offer intelligent assistance, allowing you to focus on your creative vision.
 
 While enhanced with AI, Kudou retains the complete feature set and spirit of Godot. It's the feature-packed, cross-platform game engine you know and love, now supercharged with an AI co-developer.
 
