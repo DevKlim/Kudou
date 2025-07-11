@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="#">
-    <img src="kudou\assets\kudou_logo.png" width="400" alt="Kudou Engine logo">
+    <img src="kudou\assets\kudou_engine.png" width="400" alt="Kudou Engine logo">
   </a>
 </p>
 
