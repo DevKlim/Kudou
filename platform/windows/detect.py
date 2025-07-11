@@ -215,7 +215,6 @@ def get_opts():
             "Path to the PIX runtime distribution (optional for D3D12)",
             os.path.join(d3d12_deps_folder, "pix"),
         ),
-        BoolVariable("sdl", "Enable SDL support", False),
     ]
 
 

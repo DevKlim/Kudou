@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/cmake_install.cmake",
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/libcef_dll_wrapper/cmake_install.cmake",
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/tests/cefsimple/cmake_install.cmake",
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/tests/gtest/cmake_install.cmake",
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/tests/ceftests/cmake_install.cmake",
+		"C:/Users/lxvel/OneDrive/Desktop/Projects/KudouProj/Kudou/thirdparty/cef_binary/CMake/tests/cefclient/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

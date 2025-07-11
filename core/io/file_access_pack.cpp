@@ -1,10 +1,34 @@
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "file_access_pack.h"
 
 #include "core/io/file_access_encrypted.h"
 #include "core/object/script_language.h"
 #include "core/os/os.h"
 #include "core/version.h"
-#include <string.h> // For memcpy
 
 Error PackedData::add_pack(const String &p_path, bool p_replace_files, uint64_t p_offset) {
 	for (int i = 0; i < sources.size(); i++) {
@@ -28,7 +52,9 @@ void PackedData::add_path(const String &p_pkg_path, const String &p_path, uint64
 	pf.pack = p_pkg_path;
 	pf.offset = p_ofs;
 	pf.size = p_size;
-	memcpy(pf.md5, p_md5, 16); // Refactored: Use memcpy for MD5 array copy
+	for (int i = 0; i < 16; i++) {
+		pf.md5[i] = p_md5[i];
+	}
 	pf.src = p_src;
 
 	if (!exists || p_replace_files) {
@@ -265,7 +291,9 @@ bool PackedSourcePCK::try_open_pack(const String &p_path, bool p_replace_files, 
 
 		Vector<uint8_t> key;
 		key.resize(32);
-		memcpy(key.ptrw(), script_encryption_key, 32); // Refactored: Use memcpy for encryption key copy
+		for (int i = 0; i < key.size(); i++) {
+			key.write[i] = script_encryption_key[i];
+		}
 
 		Error err = fae->open_and_parse(f, key, FileAccessEncrypted::MODE_READ, false);
 		ERR_FAIL_COND_V_MSG(err, false, "Can't open encrypted pack directory.");
@@ -457,7 +485,9 @@ FileAccessPack::FileAccessPack(const String &p_path, const PackedData::PackedFil
 
 		Vector<uint8_t> key;
 		key.resize(32);
-		memcpy(key.ptrw(), script_encryption_key, 32); // Refactored: Use memcpy for encryption key copy
+		for (int i = 0; i < key.size(); i++) {
+			key.write[i] = script_encryption_key[i];
+		}
 
 		Error err = fae->open_and_parse(f, key, FileAccessEncrypted::MODE_READ, false);
 		ERR_FAIL_COND_MSG(err, vformat("Can't open encrypted pack-referenced file '%s'.", String(pf.pack)));

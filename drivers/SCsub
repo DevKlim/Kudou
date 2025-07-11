@@ -71,5 +71,4 @@ SConscript("png/SCsub")
 env.add_source_files(env.drivers_sources, "*.cpp")
 
 lib = env.add_library("drivers", env.drivers_sources)
-print("drivers lib:", lib)
 env.Prepend(LIBS=[lib])

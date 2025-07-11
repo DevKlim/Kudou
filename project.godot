@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Kudou Browser"
+config/icon="res://kudou/assets/Kudou.svg"
 config/features=PackedStringArray("4.4")
 
 [editor_plugins]

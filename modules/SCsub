@@ -38,8 +38,7 @@ for name, path in env.module_list.items():
     SConscript(base_path + "/SCsub")
 
     lib = env_modules.add_library("module_%s" % name, env.modules_sources)
-    if lib:
-        env.Prepend(LIBS=[lib])
+    env.Prepend(LIBS=[lib])
 
     if env["tests"]:
         # Lookup potential headers in `tests` subfolder.

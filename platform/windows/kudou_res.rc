@@ -1,0 +1,34 @@
+#include "core/version.h"
+
+#ifndef RT_MANIFEST
+#define RT_MANIFEST 24
+#endif
+
+KUDOU_ICON ICON kudou/assets/kudou.ico
+1 RT_MANIFEST "godot.manifest"
+
+1 VERSIONINFO
+FILEVERSION     GODOT_VERSION_MAJOR,GODOT_VERSION_MINOR,GODOT_VERSION_PATCH,0
+PRODUCTVERSION  GODOT_VERSION_MAJOR,GODOT_VERSION_MINOR,GODOT_VERSION_PATCH,0
+FILEOS          4
+FILETYPE        1
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",            "Kudou"
+            VALUE "FileDescription",        "Kudou"
+            VALUE "FileVersion",            GODOT_VERSION_NUMBER
+            VALUE "ProductName",            "Kudou"
+            VALUE "Licence",                "MIT"
+            VALUE "LegalCopyright",         "(c) 2024 Kudou"
+            VALUE "Info",                   "https://kudou.com"
+            VALUE "ProductVersion",         GODOT_VERSION_FULL_BUILD
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

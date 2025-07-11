@@ -1,0 +1,68 @@
+# Kudou/kudou/SCsub
+Import("env")
+
+
+# --- Build the Main Godot Module ---
+env.add_source_files(env.modules_sources, "*.cpp")
+if env.editor_build:
+    env.add_source_files(env.modules_sources, "editor/*.cpp")
+
+# --- Configure CEF for the Main Godot Executable ---
+if env["platform"] == "windows":
+    # Add the path to the CEF headers for the entire module.
+    env.Append(CPPPATH=["#thirdparty/cef_binary"])
+
+    # Add the path to the CEF libraries for the linker.
+    env.Append(LIBPATH=["#thirdparty/cef_binary/libs"])
+
+    # Construct the library name dynamically.
+    arch = env["arch"]
+    target = env["target"]
+    
+    # Handle potential variations in target names.
+    if target == "template_debug":
+        target_str = "debug"
+    elif target == "template_release":
+        target_str = "release"
+    else:
+        target_str = "editor"
+
+    cef_lib_name = f"libcef.lib.windows.{target_str}.{arch}.lib"
+
+    # Add the CEF libraries.
+    env.Append(LIBS=[cef_lib_name, "libcef_dll_wrapper.lib"])
+
+    # Add system libraries required by CEF.
+    env.Append(LINKFLAGS=["user32.lib", "gdi32.lib", "shell32.lib", "ole32.lib"])
+
+    # --- Build the CEF Render Process Helper ---
+    # We build this as a separate program and in a separate environment to avoid issues with library name mangling.
+    render_process_env = Environment()
+    render_process_env.Append(CPPPATH=env["CPPPATH"])
+    render_process_env.Append(CPPDEFINES=env["CPPDEFINES"])
+    render_process_env.Append(LIBS=[cef_lib_name, "libcef_dll_wrapper.lib"])
+    render_process_env.Append(LIBPATH=["#thirdparty/cef_binary/libs"])
+    if env["platform"] == "windows":
+        render_process_env.Append(CXXFLAGS=["/std:c++17"])
+    
+    program = render_process_env.Program(
+        target="gdCefRenderProcess",
+        source=["render_process/render_process_main.cpp"],
+    )
+    env.Install("#bin", program)
+
+# --- Copy CEF artifacts to the bin directory ---
+if env["platform"] == "windows":
+    cef_source_dir = "#thirdparty/cef_binary/"
+    
+    # Copy DLLs required by libcef.dll
+    env.Install("#bin", Glob(cef_source_dir + "*.dll"))
+    
+    # Copy CEF resource files
+    env.Install("#bin", Glob(cef_source_dir + "*.pak"))
+    env.Install("#bin", Glob(cef_source_dir + "*.dat"))
+    env.Install("#bin", Glob(cef_source_dir + "*.bin"))
+
+    # Create locales directory in bin and copy .pak files into it
+    env.Dir("#bin/locales")
+    env.Install("#bin/locales", Glob(cef_source_dir + "locales/*.pak"))

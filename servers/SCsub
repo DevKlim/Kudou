@@ -37,4 +37,5 @@ if not env["disable_xr"]:
     SConscript("xr/SCsub")
 
 lib = env.add_library("servers", env.servers_sources)
+
 env.Prepend(LIBS=[lib])
