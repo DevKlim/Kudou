@@ -45,7 +45,7 @@ Kudou enhances the powerful Godot editor with a suite of seamlessly integrated A
     -   Connect directly to LLM APIs (e.g., Google's Gemini API) for a fully integrated experience.
     -   Prefer a different service? The agent can automatically format a context-rich prompt, copy it to your clipboard, and open your preferred AI service (ChatGPT, Claude, etc.) in the integrated browser with a single click.
 
-![Screenshot of a 3D scene in the Godot Engine editor](https://raw.githubusercontent.com/godotengine/godot-design/master/screenshots/editor_tps_demo_1920x1080.jpg)
+![Screenshot of a 3D scene in the Godot Engine editor](kudou/assets/editor.jpg)
 
 ## Getting the Engine
 
